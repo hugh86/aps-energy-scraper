@@ -15,6 +15,7 @@ services:
     image: eclipse-mosquitto
     container_name: mosquitto
     restart: unless-stopped
+    network_mode: host
     ports:
       - "1883:1883"     # MQTT port
       - "9001:9001"     # WebSockets (optional)
