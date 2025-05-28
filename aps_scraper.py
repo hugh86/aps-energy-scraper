@@ -33,20 +33,19 @@ def run_scraper():
     logging.info("Running APS scraper...")
 
     options = Options()
-    options.binary_location = os.getenv("CHROME_BIN", "/usr/bin/chromium")
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
 
-    service = Service(os.getenv("CHROMEDRIVER_BIN", "/usr/bin/chromedriver"))
+    service = Service("/usr/bin/chromedriver")  # adjust path if needed
     driver = webdriver.Chrome(service=service, options=options)
 
     try:
-        # Step 1: Open APS login page
+        # Open APS login page
         driver.get("https://www.aps.com/Authorization/Login")
         logging.info("Opened APS login page.")
 
-        # Step 2: Accept cookie banner if present
+        # Accept cookie banner if present
         try:
             cookie_accept_button = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Accept')]"))
@@ -56,7 +55,7 @@ def run_scraper():
         except Exception:
             logging.info("No cookie banner to accept.")
 
-        # Step 3: Enter login credentials (field labeled "Email Address or Username")
+        # Enter login credentials
         username_input = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.ID, "emailAddress"))
         )
@@ -67,22 +66,25 @@ def run_scraper():
         password_input.clear()
         password_input.send_keys(APS_PASSWORD)
 
-        sign_in_button = driver.find_element(By.ID, "login-submit")
+        # Click the Sign In button (anchor tag with text 'Sign In')
+        sign_in_button = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, "//a[contains(text(),'Sign In')]"))
+        )
         sign_in_button.click()
         logging.info("Entered credentials and clicked Sign In.")
 
-        # Step 4: Wait for dashboard page (confirm successful login)
+        # Wait for dashboard page
         WebDriverWait(driver, 30).until(EC.url_contains("/Dashboard"))
         logging.info("✅ Successfully logged in, dashboard page reached.")
 
-        # Step 5: Navigate to usage dashboard page
+        # Navigate to usage dashboard page
         driver.get("https://www.aps.com/en/Residential/Account/Overview/Dashboard?origin=usage")
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.XPATH, "//span[contains(text(),'Hourly')]"))
         )
         logging.info("Navigated to usage dashboard page.")
 
-        # Step 6: Wait for spinner gone, then click the Hourly tab
+        # Wait for spinner to disappear before clicking Hourly tab
         WebDriverWait(driver, 20).until(
             EC.invisibility_of_element_located((By.ID, "spinnerFocus"))
         )
@@ -93,22 +95,14 @@ def run_scraper():
         hourly_tab.click()
         logging.info("Clicked Hourly tab.")
 
-        # Step 7: Capture the date span text
+        # Scrape data here as needed...
+        # (Example for date span)
         date_span = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "span.css-geyj4e"))
         )
-        date_text = date_span.text
-        logging.info(f"Date captured: {date_text}")
+        logging.info(f"Date captured: {date_span.text}")
 
-        # Step 8: Capture energy data spans
-        energy_generated = driver.find_element(By.XPATH, "//span[contains(text(),'Total Energy Generated')]/following-sibling::span").text
-        energy_sold = driver.find_element(By.XPATH, "//span[contains(text(),'Total Energy Sold to APS')]/following-sibling::span").text
-        energy_used = driver.find_element(By.XPATH, "//span[contains(text(),'Total APS Energy Used')]/following-sibling::span").text
-
-        logging.info("✅ Data Captured:")
-        logging.info(f"  Total Energy Generated: {energy_generated}")
-        logging.info(f"  Total Energy Sold to APS: {energy_sold}")
-        logging.info(f"  Total APS Energy Used: {energy_used}")
+        # Continue with your scraping...
 
     except Exception as e:
         logging.error(f"❌ Error during scraping: {e}")
