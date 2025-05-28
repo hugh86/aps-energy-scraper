@@ -35,6 +35,15 @@ def save_last_run_time():
     with open(LAST_RUN_FILE, "w") as f:
         f.write(str(time.time()))
 
+def wait_for_spinner_to_disappear(driver, timeout=15):
+    try:
+        WebDriverWait(driver, timeout).until(
+            EC.invisibility_of_element_located((By.ID, "spinnerFocus"))
+        )
+        logging.info("Spinner disappeared, ready to interact with the page.")
+    except Exception:
+        logging.info("Spinner did not disappear within timeout or was not present.")
+
 def run_scraper():
     logging.info("Running APS scraper...")
 
@@ -83,25 +92,17 @@ def run_scraper():
 
         # Step 5: Navigate to usage dashboard page
         driver.get("https://www.aps.com/en/Residential/Account/Overview/Dashboard?origin=usage")
+        wait_for_spinner_to_disappear(driver)
 
-        # Wait for spinner to disappear before proceeding
-        WebDriverWait(driver, 30).until(
-            EC.invisibility_of_element_located((By.ID, "spinnerFocus"))
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.XPATH, "//span[contains(text(),'Hourly')]"))
         )
-        logging.info("Spinner disappeared, ready to interact with the page.")
 
-        # Step 6: Wait for and click the Hourly tab
-        hourly_tab = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'Hourly')]"))
-        )
+        # Step 6: Click the Hourly tab
+        hourly_tab = driver.find_element(By.XPATH, "//span[contains(text(),'Hourly')]")
         hourly_tab.click()
         logging.info("Clicked Hourly tab.")
-
-        # Wait again for spinner to disappear after clicking tab
-        WebDriverWait(driver, 30).until(
-            EC.invisibility_of_element_located((By.ID, "spinnerFocus"))
-        )
-        logging.info("Spinner disappeared after clicking Hourly tab.")
+        wait_for_spinner_to_disappear(driver)
 
         # Step 7: Capture the date span text
         date_span = WebDriverWait(driver, 15).until(
@@ -110,15 +111,23 @@ def run_scraper():
         date_text = date_span.text
         logging.info(f"Date captured: {date_text}")
 
-        # Step 8: Capture energy data spans
-        energy_generated = driver.find_element(By.XPATH, "//span[contains(text(),'Total Energy Generated')]/following-sibling::span").text
-        energy_sold = driver.find_element(By.XPATH, "//span[contains(text(),'Total Energy Sold to APS')]/following-sibling::span").text
-        energy_used = driver.find_element(By.XPATH, "//span[contains(text(),'Total APS Energy Used')]/following-sibling::span").text
+        # Step 8: Capture energy data from structured div/span elements
+        container = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div.css-6req3m > div.css-15bvg19"))
+        )
+
+        data_spans = container.find_elements(By.CSS_SELECTOR, "span.css-1c4vfd5")
+
+        energy_data = {}
+        for span in data_spans:
+            value = span.find_element(By.CSS_SELECTOR, "span.css-pzpy3e").text.strip()
+            label = span.find_element(By.CSS_SELECTOR, "span.css-1wwo9nq").text.strip()
+            energy_data[label] = value
 
         logging.info("✅ Data Captured:")
-        logging.info(f"  Total Energy Generated: {energy_generated}")
-        logging.info(f"  Total Energy Sold to APS: {energy_sold}")
-        logging.info(f"  Total APS Energy Used: {energy_used}")
+        logging.info(f"  Total Energy Generated: {energy_data.get('Total Energy Generated', 'N/A')}")
+        logging.info(f"  Total Energy Sold To APS: {energy_data.get('Total Energy Sold To APS', 'N/A')}")
+        logging.info(f"  Total APS Energy Used: {energy_data.get('Total APS Energy Used', 'N/A')}")
 
     except Exception as e:
         logging.error(f"❌ Error during scraping: {e}")
