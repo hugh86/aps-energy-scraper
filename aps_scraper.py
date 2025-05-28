@@ -16,23 +16,17 @@ APS_PASSWORD = os.getenv("APS_PASSWORD")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
-LAST_RUN_FILE = "/tmp/aps_scraper_last_run.txt"
+LOCKFILE = "/tmp/aps_scraper.lock"
+MIN_INTERVAL_SECONDS = 600  # 10 minutes
 
 def already_ran_recently():
-    try:
-        with open(LAST_RUN_FILE, "r") as f:
-            last_run = float(f.read().strip())
-        if time.time() - last_run < 600:  # 600 seconds = 10 minutes
-            logging.info("Script ran less than 10 minutes ago. Exiting.")
-            return True
-    except FileNotFoundError:
+    if not os.path.exists(LOCKFILE):
         return False
-    except Exception as e:
-        logging.warning(f"Could not read last run time: {e}")
-    return False
+    last_run = os.path.getmtime(LOCKFILE)
+    return (time.time() - last_run) < MIN_INTERVAL_SECONDS
 
-def save_last_run_time():
-    with open(LAST_RUN_FILE, "w") as f:
+def update_lockfile():
+    with open(LOCKFILE, "w") as f:
         f.write(str(time.time()))
 
 def run_scraper():
@@ -48,33 +42,33 @@ def run_scraper():
     driver = webdriver.Chrome(service=service, options=options)
 
     try:
-        # Step 1: Open login page directly
+        # Step 1: Open APS login page
         driver.get("https://www.aps.com/Authorization/Login")
         logging.info("Opened APS login page.")
 
-        # Step 2: Accept cookies if present
+        # Step 2: Accept cookie banner if present
         try:
-            cookie_accept = WebDriverWait(driver, 5).until(
+            cookie_accept_button = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Accept')]"))
             )
-            cookie_accept.click()
-            logging.info("Cookie banner accepted.")
+            cookie_accept_button.click()
+            logging.info("Accepted cookie banner.")
         except Exception:
             logging.info("No cookie banner to accept.")
 
-        # Step 3: Wait for login fields, enter credentials and submit login
-        WebDriverWait(driver, 15).until(
+        # Step 3: Enter login credentials (field labeled "Email Address or Username")
+        username_input = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.ID, "emailAddress"))
         )
-        driver.find_element(By.ID, "emailAddress").clear()
-        driver.find_element(By.ID, "emailAddress").send_keys(APS_USERNAME)
+        username_input.clear()
+        username_input.send_keys(APS_USERNAME)
 
-        driver.find_element(By.ID, "password").clear()
-        driver.find_element(By.ID, "password").send_keys(APS_PASSWORD)
+        password_input = driver.find_element(By.ID, "password")
+        password_input.clear()
+        password_input.send_keys(APS_PASSWORD)
 
-        # Click the Sign In button below password input
-        sign_in_btn = driver.find_element(By.XPATH, "//button[@aria-label='Sign In' or contains(text(),'Sign In')]")
-        sign_in_btn.click()
+        sign_in_button = driver.find_element(By.ID, "login-submit")
+        sign_in_button.click()
         logging.info("Entered credentials and clicked Sign In.")
 
         # Step 4: Wait for dashboard page (confirm successful login)
@@ -88,8 +82,14 @@ def run_scraper():
         )
         logging.info("Navigated to usage dashboard page.")
 
-        # Step 6: Click the Hourly tab
-        hourly_tab = driver.find_element(By.XPATH, "//span[contains(text(),'Hourly')]")
+        # Step 6: Wait for spinner gone, then click the Hourly tab
+        WebDriverWait(driver, 20).until(
+            EC.invisibility_of_element_located((By.ID, "spinnerFocus"))
+        )
+
+        hourly_tab = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'Hourly')]"))
+        )
         hourly_tab.click()
         logging.info("Clicked Hourly tab.")
 
@@ -118,6 +118,8 @@ def run_scraper():
         logging.info("Browser closed.")
 
 if __name__ == "__main__":
-    if not already_ran_recently():
+    if already_ran_recently():
+        logging.info("Skipping run: scraper ran less than 10 minutes ago.")
+    else:
         run_scraper()
-        save_last_run_time()
+        update_lockfile()
