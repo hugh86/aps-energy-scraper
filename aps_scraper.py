@@ -16,39 +16,28 @@ APS_PASSWORD = os.getenv("APS_PASSWORD")
 def run_scraper():
     print("Running APS scraper...")
 
-    chrome_options = Options()
-    # Use chromium installed by apt
-    chrome_options.add_argument("--headless=new")  # Use new headless mode
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--remote-debugging-port=9222")  # Helps with debugging
+    options = Options()
+    options.binary_location = os.getenv("CHROME_BIN", "/usr/bin/chromium")
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
-
-    chromedriver_path = os.getenv("CHROMEDRIVER_BIN", "/usr/bin/chromedriver")
-    service = Service(chromedriver_path)
-
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    service = Service(os.getenv("CHROMEDRIVER_BIN", "/usr/bin/chromedriver"))
+    driver = webdriver.Chrome(service=service, options=options)
 
     try:
         driver.get("https://www.aps.com/en/Account/Sign-In")
 
-        # Login
         WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "username")))
         driver.find_element(By.ID, "username").send_keys(APS_USERNAME)
         driver.find_element(By.ID, "password").send_keys(APS_PASSWORD)
         driver.find_element(By.ID, "login-submit").click()
 
-        # Wait for login to complete
         WebDriverWait(driver, 15).until(EC.url_contains("dashboard"))
-
-        # Navigate to usage page (update this URL if needed)
         driver.get("https://www.aps.com/en/Residential/Account/Usage")
 
-        # Wait for data to load — inspect APS site to get the correct selectors
         WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Total Energy')]")))
 
-        # Extract data — update these XPaths based on actual APS HTML structure
         energy_generated = driver.find_element(By.XPATH, "//div[@id='energyGenerated']").text
         energy_sold = driver.find_element(By.XPATH, "//div[@id='energySold']").text
         energy_used = driver.find_element(By.XPATH, "//div[@id='energyUsed']").text
@@ -68,5 +57,5 @@ def run_scraper():
 if __name__ == "__main__":
     while True:
         run_scraper()
-        print("Pausing for 1 minute before next run...")
-        time.sleep(60)
+        print("⏱️ Waiting 24 hours until next run...")
+        time.sleep(24 * 60 * 60)  # Sleep for 24 hours
