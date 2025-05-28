@@ -5,6 +5,6 @@ services:
     build: .
     container_name: aps-energy-scraper
     environment:
-      APS_USERNAME: [user]
-      APS_PASSWORD: [password]
+      APS_USERNAME: user
+      APS_PASSWORD: password
     restart: unless-stopped
