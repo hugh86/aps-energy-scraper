@@ -33,53 +33,60 @@ def run_scraper():
         driver.get("https://www.aps.com/en/Residential/Home")
         logging.info("Opened APS residential home page.")
 
-        # Step 2: Click the sign-in button on home page
+        # Optional: accept cookie banner if present
+        try:
+            cookie_button = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Accept All Cookies')]"))
+            )
+            cookie_button.click()
+            logging.info("Accepted cookie banner.")
+        except:
+            logging.info("No cookie banner found.")
+
+        # Step 2: Click Sign In to open the login dropdown
         sign_in_button = WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.XPATH, "//a[contains(text(),'Sign In')]"))
         )
+        driver.execute_script("arguments[0].scrollIntoView(true);", sign_in_button)
         sign_in_button.click()
         logging.info("Clicked Sign In button.")
 
-        # Step 3: Wait for login form, enter credentials and submit
+        # Step 3: Wait for login dropdown to appear
         WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.XPATH, "//input[@type='email' or @placeholder='Email Address']"))
+            EC.visibility_of_element_located((By.ID, "emailAddress"))
         )
-        email_input = driver.find_element(By.XPATH, "//input[@type='email' or @placeholder='Email Address']")
-        email_input.clear()
-        email_input.send_keys(APS_USERNAME)
+        logging.info("Login dropdown appeared.")
 
-        password_input = driver.find_element(By.XPATH, "//input[@type='password']")
-        password_input.clear()
-        password_input.send_keys(APS_PASSWORD)
-
-        login_button = driver.find_element(By.XPATH, "//button[@type='submit' or contains(text(),'Sign In')]")
-        login_button.click()
+        # Step 4: Enter credentials and submit
+        driver.find_element(By.ID, "emailAddress").send_keys(APS_USERNAME)
+        driver.find_element(By.ID, "password").send_keys(APS_PASSWORD)
+        driver.find_element(By.ID, "login-submit").click()
         logging.info("Entered credentials and submitted login form.")
 
-        # Step 4: Wait for dashboard page (confirm successful login)
+        # Step 5: Wait for dashboard page
         WebDriverWait(driver, 30).until(EC.url_contains("/Dashboard"))
         logging.info("✅ Successfully logged in, dashboard page reached.")
 
-        # Step 5: Navigate to usage dashboard page
+        # Step 6: Navigate to usage dashboard page
         driver.get("https://www.aps.com/en/Residential/Account/Overview/Dashboard?origin=usage")
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.XPATH, "//span[contains(text(),'Hourly')]"))
         )
         logging.info("Navigated to usage dashboard page.")
 
-        # Step 6: Click the Hourly tab
+        # Step 7: Click the Hourly tab
         hourly_tab = driver.find_element(By.XPATH, "//span[contains(text(),'Hourly')]")
         hourly_tab.click()
         logging.info("Clicked Hourly tab.")
 
-        # Step 7: Capture the date span text
+        # Step 8: Capture the date span text
         date_span = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "span.css-geyj4e"))
         )
         date_text = date_span.text
         logging.info(f"Date captured: {date_text}")
 
-        # Step 8: Capture energy data spans
+        # Step 9: Capture energy data spans
         energy_generated = driver.find_element(By.XPATH, "//span[contains(text(),'Total Energy Generated')]/following-sibling::span").text
         energy_sold = driver.find_element(By.XPATH, "//span[contains(text(),'Total Energy Sold to APS')]/following-sibling::span").text
         energy_used = driver.find_element(By.XPATH, "//span[contains(text(),'Total APS Energy Used')]/following-sibling::span").text
@@ -90,7 +97,9 @@ def run_scraper():
         logging.info(f"  Total APS Energy Used: {energy_used}")
 
     except Exception as e:
-        logging.error("❌ Error during scraping", exc_info=True)
+        logging.error(f"❌ Error during scraping: {e}", exc_info=True)
+        driver.save_screenshot("debug_screenshot.png")
+        logging.info("Saved screenshot: debug_screenshot.png")
 
     finally:
         driver.quit()
