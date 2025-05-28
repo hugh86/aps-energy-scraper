@@ -4,14 +4,13 @@ import os
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
 from dotenv import load_dotenv
 
 load_dotenv()
 
 APS_USERNAME = os.getenv("APS_USERNAME")
 APS_PASSWORD = os.getenv("APS_PASSWORD")
-CHROMEDRIVER_BIN = os.getenv("CHROMEDRIVER_BIN", "/usr/lib/chromium/chromedriver")
+CHROMEDRIVER_BIN = os.getenv("CHROMEDRIVER_BIN", "/usr/bin/chromedriver")
 CHROME_BIN = os.getenv("CHROME_BIN", "/usr/bin/chromium")
 
 def run_scraper():
@@ -28,18 +27,19 @@ def run_scraper():
 
     try:
         driver.get("https://www.aps.com/")
-        # TODO: Add login and scraping logic here
+        # Placeholder: implement login and scraping
         print("Logged in and captured data... (implement this)")
     finally:
         driver.quit()
         print("Browser closed.")
 
-# Run immediately
+# Run once at startup
 run_scraper()
 
-# Optional: Schedule to run daily at 8:30 AM
+# Schedule for 8:30 AM daily
 schedule.every().day.at("08:30").do(run_scraper)
 
+# Keep running the scheduler loop
 while True:
     schedule.run_pending()
     time.sleep(60)
