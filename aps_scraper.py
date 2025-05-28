@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+from datetime import datetime, timedelta
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -13,10 +14,32 @@ load_dotenv()
 
 APS_USERNAME = os.getenv("APS_USERNAME")
 APS_PASSWORD = os.getenv("APS_PASSWORD")
+TIMESTAMP_FILE = "/tmp/aps_scraper_last_run.txt"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
+
+def should_run():
+    try:
+        with open(TIMESTAMP_FILE, 'r') as f:
+            last_run = datetime.fromisoformat(f.read().strip())
+            if datetime.now() - last_run < timedelta(minutes=10):
+                logging.info("⏱ Skipping run: last run was less than 10 minutes ago.")
+                return False
+    except FileNotFoundError:
+        pass
+    return True
+
+
+def update_last_run():
+    with open(TIMESTAMP_FILE, 'w') as f:
+        f.write(datetime.now().isoformat())
+
+
 def run_scraper():
+    if not should_run():
+        return
+
     logging.info("Running APS scraper...")
 
     options = Options()
@@ -29,81 +52,64 @@ def run_scraper():
     driver = webdriver.Chrome(service=service, options=options)
 
     try:
-        # Step 1: Open APS residential home page
-        driver.get("https://www.aps.com/en/Residential/Home")
-        logging.info("Opened APS residential home page.")
+        # Step 1: Open APS landing page
+        driver.get("https://www.aps.com/en/Residential/Save-Money-and-Energy/Home-Energy-Report")
+        logging.info("Opened APS landing page.")
 
-        # Optional: accept cookie banner if present
+        # Step 2: Accept cookies if present
         try:
-            cookie_button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Accept All Cookies')]"))
+            accept_button = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Accept')]"))
             )
-            cookie_button.click()
+            accept_button.click()
             logging.info("Accepted cookie banner.")
-        except:
-            logging.info("No cookie banner found.")
+        except Exception:
+            logging.info("No cookie banner appeared.")
 
-        # Step 2: Click Sign In to open the login dropdown
-        sign_in_button = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.XPATH, "//a[contains(text(),'Sign In')]"))
-        )
-        driver.execute_script("arguments[0].scrollIntoView(true);", sign_in_button)
-        sign_in_button.click()
-        logging.info("Clicked Sign In button.")
-
-        # Step 3: Wait for login dropdown to appear
+        # Step 3: Fill in login form directly
         WebDriverWait(driver, 15).until(
-            EC.visibility_of_element_located((By.ID, "emailAddress"))
+            EC.presence_of_element_located((By.XPATH, "//input[@aria-label='Email Address or Username']"))
         )
-        logging.info("Login dropdown appeared.")
-
-        # Step 4: Enter credentials and submit
-        driver.find_element(By.ID, "emailAddress").send_keys(APS_USERNAME)
+        driver.find_element(By.XPATH, "//input[@aria-label='Email Address or Username']").send_keys(APS_USERNAME)
         driver.find_element(By.ID, "password").send_keys(APS_PASSWORD)
         driver.find_element(By.ID, "login-submit").click()
-        logging.info("Entered credentials and submitted login form.")
+        logging.info("Submitted login credentials.")
 
-        # Step 5: Wait for dashboard page
-        WebDriverWait(driver, 30).until(EC.url_contains("/Dashboard"))
-        logging.info("✅ Successfully logged in, dashboard page reached.")
+        # Step 4: Wait for login to complete and dashboard to load
+        WebDriverWait(driver, 30).until(
+            EC.url_contains("/Dashboard")
+        )
+        logging.info("✅ Logged in successfully.")
 
-        # Step 6: Navigate to usage dashboard page
+        # Step 5: Navigate to usage dashboard
         driver.get("https://www.aps.com/en/Residential/Account/Overview/Dashboard?origin=usage")
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.XPATH, "//span[contains(text(),'Hourly')]"))
         )
-        logging.info("Navigated to usage dashboard page.")
+        driver.find_element(By.XPATH, "//span[contains(text(),'Hourly')]").click()
+        logging.info("Navigated to Hourly usage tab.")
 
-        # Step 7: Click the Hourly tab
-        hourly_tab = driver.find_element(By.XPATH, "//span[contains(text(),'Hourly')]")
-        hourly_tab.click()
-        logging.info("Clicked Hourly tab.")
-
-        # Step 8: Capture the date span text
-        date_span = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "span.css-geyj4e"))
-        )
-        date_text = date_span.text
-        logging.info(f"Date captured: {date_text}")
-
-        # Step 9: Capture energy data spans
+        # Step 6: Extract energy data
+        date_text = driver.find_element(By.CSS_SELECTOR, "span.css-geyj4e").text
         energy_generated = driver.find_element(By.XPATH, "//span[contains(text(),'Total Energy Generated')]/following-sibling::span").text
         energy_sold = driver.find_element(By.XPATH, "//span[contains(text(),'Total Energy Sold to APS')]/following-sibling::span").text
         energy_used = driver.find_element(By.XPATH, "//span[contains(text(),'Total APS Energy Used')]/following-sibling::span").text
 
         logging.info("✅ Data Captured:")
+        logging.info(f"  Date: {date_text}")
         logging.info(f"  Total Energy Generated: {energy_generated}")
         logging.info(f"  Total Energy Sold to APS: {energy_sold}")
         logging.info(f"  Total APS Energy Used: {energy_used}")
 
+        update_last_run()
+
     except Exception as e:
-        logging.error(f"❌ Error during scraping: {e}", exc_info=True)
-        driver.save_screenshot("debug_screenshot.png")
-        logging.info("Saved screenshot: debug_screenshot.png")
+        logging.error(f"❌ Error during scraping: {e}")
 
     finally:
         driver.quit()
         logging.info("Browser closed.")
+
 
 if __name__ == "__main__":
     run_scraper()
