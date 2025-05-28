@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  aps-scraper:
+    build: .
+    container_name: aps-energy-scraper
+    environment:
+      APS_USERNAME: [user]
+      APS_PASSWORD: [password]
+    restart: unless-stopped
