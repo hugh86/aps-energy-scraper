@@ -1,6 +1,8 @@
 import os
 import time
+import json
 import logging
+import paho.mqtt.client as mqtt
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -13,6 +15,8 @@ load_dotenv()
 
 APS_USERNAME = os.getenv("APS_USERNAME")
 APS_PASSWORD = os.getenv("APS_PASSWORD")
+MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
 LAST_RUN_FILE = "/tmp/aps_scraper_last_run.txt"
 RUN_INTERVAL_SECONDS = 4 * 60 * 60  # 4 hours
 
@@ -38,6 +42,33 @@ def wait_for_spinner_to_disappear(driver, timeout=15):
     except:
         pass
 
+def publish_discovery(client, topic_suffix, name, unit, unique_id):
+    discovery_topic = f"homeassistant/sensor/aps_energy_{topic_suffix}/config"
+    payload = {
+        "name": name,
+        "state_topic": f"aps_energy/{topic_suffix}",
+        "unit_of_measurement": unit,
+        "unique_id": unique_id,
+        "device": {
+            "identifiers": ["aps_energy_scraper"],
+            "name": "APS Energy Scraper",
+            "manufacturer": "Custom",
+            "model": "Web Scraper"
+        }
+    }
+    client.publish(discovery_topic, json.dumps(payload), retain=True)
+
+def publish_energy_data(client, data):
+    # Publish discovery messages once per run
+    publish_discovery(client, "total_generated", "Total Energy Generated", "kWh", "aps_total_generated")
+    publish_discovery(client, "total_sold", "Total Energy Sold To APS", "kWh", "aps_total_sold")
+    publish_discovery(client, "total_used", "Total APS Energy Used", "kWh", "aps_total_used")
+
+    # Publish the actual values
+    client.publish("aps_energy/total_generated", data.get("Total Energy Generated", "0"), retain=True)
+    client.publish("aps_energy/total_sold", data.get("Total Energy Sold To APS", "0"), retain=True)
+    client.publish("aps_energy/total_used", data.get("Total APS Energy Used", "0"), retain=True)
+
 def run_scraper():
     options = Options()
     options.binary_location = os.getenv("CHROME_BIN", "/usr/bin/chromium")
@@ -51,7 +82,6 @@ def run_scraper():
     try:
         driver.get("https://www.aps.com/Authorization/Login")
 
-        # Cookie banner
         try:
             WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Accept')]"))
@@ -92,6 +122,12 @@ def run_scraper():
         logging.info(f"🔋 Total Energy Generated: {energy_data.get('Total Energy Generated', 'N/A')}")
         logging.info(f"🔄 Total Energy Sold To APS: {energy_data.get('Total Energy Sold To APS', 'N/A')}")
         logging.info(f"⚡ Total APS Energy Used: {energy_data.get('Total APS Energy Used', 'N/A')}")
+
+        # MQTT publish
+        client = mqtt.Client()
+        client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        publish_energy_data(client, energy_data)
+        client.disconnect()
 
     except Exception as e:
         logging.error(f"❌ Scraper failed: {e}")
