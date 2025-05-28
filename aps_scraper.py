@@ -83,15 +83,25 @@ def run_scraper():
 
         # Step 5: Navigate to usage dashboard page
         driver.get("https://www.aps.com/en/Residential/Account/Overview/Dashboard?origin=usage")
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.XPATH, "//span[contains(text(),'Hourly')]"))
-        )
-        logging.info("Navigated to usage dashboard page.")
 
-        # Step 6: Click the Hourly tab
-        hourly_tab = driver.find_element(By.XPATH, "//span[contains(text(),'Hourly')]")
+        # Wait for spinner to disappear before proceeding
+        WebDriverWait(driver, 30).until(
+            EC.invisibility_of_element_located((By.ID, "spinnerFocus"))
+        )
+        logging.info("Spinner disappeared, ready to interact with the page.")
+
+        # Step 6: Wait for and click the Hourly tab
+        hourly_tab = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'Hourly')]"))
+        )
         hourly_tab.click()
         logging.info("Clicked Hourly tab.")
+
+        # Wait again for spinner to disappear after clicking tab
+        WebDriverWait(driver, 30).until(
+            EC.invisibility_of_element_located((By.ID, "spinnerFocus"))
+        )
+        logging.info("Spinner disappeared after clicking Hourly tab.")
 
         # Step 7: Capture the date span text
         date_span = WebDriverWait(driver, 15).until(
