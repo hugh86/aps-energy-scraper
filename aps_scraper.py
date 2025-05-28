@@ -33,12 +33,13 @@ def run_scraper():
         driver.get("https://www.aps.com/en/Residential/Home")
         logging.info("Opened APS residential home page.")
 
-        # Step 2: Click the sign-in button on home page
+        # Wait for the sign-in button to be clickable
         sign_in_button = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.XPATH, "//a[contains(text(),'Sign In')]"))
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-testid='header-login-button']"))
         )
         sign_in_button.click()
         logging.info("Clicked Sign In button.")
+
 
         # Step 3: Wait for login form, enter credentials and submit
         WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "username")))
