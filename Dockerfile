@@ -1,6 +1,6 @@
 FROM arm64v8/python:3.11-slim
 
-# Install Chrome dependencies
+# Install system and Chrome dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     unzip \
@@ -16,23 +16,22 @@ RUN apt-get update && apt-get install -y \
     fonts-liberation \
     libu2f-udev \
     ca-certificates \
-    wget \
     chromium \
     chromium-driver && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Set environment variables to use Chromium and its driver
+# Set environment variables for Chromium and Chromedriver
 ENV CHROME_BIN=/usr/bin/chromium
 ENV CHROMEDRIVER_BIN=/usr/lib/chromium/chromedriver
 
-# Set up the working directory
+# Set working directory
 WORKDIR /app
 
-# Copy app files
+# Copy all project files (including .env if used for dev, but you can exclude it with .dockerignore)
 COPY . /app
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Run the scraper
+# Command to run the scraper
 CMD ["python", "aps_scraper.py"]
