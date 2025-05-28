@@ -18,10 +18,12 @@ def run_scraper():
 
     chrome_options = Options()
     # Use chromium installed by apt
-    chrome_options.binary_location = os.getenv("CHROME_BIN", "/usr/bin/chromium")
-    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless=new")  # Use new headless mode
+    chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--remote-debugging-port=9222")  # Helps with debugging
+
 
     chromedriver_path = os.getenv("CHROMEDRIVER_BIN", "/usr/bin/chromedriver")
     service = Service(chromedriver_path)
