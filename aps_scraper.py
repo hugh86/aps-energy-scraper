@@ -16,6 +16,16 @@ APS_PASSWORD = os.getenv("APS_PASSWORD")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
+def save_debug(driver, label):
+    """Save a screenshot and page source with a label."""
+    try:
+        driver.save_screenshot(f"/tmp/debug_{label}.png")
+        with open(f"/tmp/debug_{label}.html", "w", encoding="utf-8") as f:
+            f.write(driver.page_source)
+        logging.info(f"🖼️ Screenshot and page source saved: {label}")
+    except Exception as e:
+        logging.warning(f"Could not save debug info for {label}: {e}")
+
 def run_scraper():
     logging.info("Running APS scraper...")
 
@@ -29,49 +39,56 @@ def run_scraper():
     driver = webdriver.Chrome(service=service, options=options)
 
     try:
-        # Step 1: Open APS residential home page
+        # Step 1: Open APS home page
+        logging.info("Opening APS homepage...")
         driver.get("https://www.aps.com/en/Residential/Home")
-        logging.info("Opened APS residential home page.")
+        save_debug(driver, "home_page_loaded")
 
-        # Step 2: Click the sign-in button on home page
-        sign_in_button = WebDriverWait(driver, 15).until(
+        # Step 2: Click Sign In
+        logging.info("Waiting for Sign In button...")
+        sign_in_button = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, "//a[contains(text(),'Sign In')]"))
         )
         sign_in_button.click()
-        logging.info("Clicked Sign In button.")
+        logging.info("Clicked Sign In.")
+        save_debug(driver, "sign_in_clicked")
 
-
-        # Step 3: Wait for login form, enter credentials and submit
-        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "username")))
+        # Step 3: Enter credentials
+        logging.info("Waiting for login form...")
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "username")))
         driver.find_element(By.ID, "username").send_keys(APS_USERNAME)
         driver.find_element(By.ID, "password").send_keys(APS_PASSWORD)
+        save_debug(driver, "credentials_entered")
+
         driver.find_element(By.ID, "login-submit").click()
-        logging.info("Entered credentials and submitted login form.")
+        logging.info("Submitted login form.")
 
-        # Step 4: Wait for dashboard page (confirm successful login)
-        WebDriverWait(driver, 30).until(EC.url_contains("/Dashboard"))
-        logging.info("✅ Successfully logged in, dashboard page reached.")
+        # Step 4: Wait for dashboard
+        logging.info("Waiting for dashboard page...")
+        WebDriverWait(driver, 20).until(EC.url_contains("/Dashboard"))
+        logging.info("✅ Successfully logged in.")
+        save_debug(driver, "dashboard_loaded")
 
-        # Step 5: Navigate to usage dashboard page
+        # Step 5: Go to usage page
         driver.get("https://www.aps.com/en/Residential/Account/Overview/Dashboard?origin=usage")
-        WebDriverWait(driver, 15).until(
+        WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, "//span[contains(text(),'Hourly')]"))
         )
-        logging.info("Navigated to usage dashboard page.")
+        logging.info("Usage dashboard loaded.")
+        save_debug(driver, "usage_dashboard")
 
-        # Step 6: Click the Hourly tab
-        hourly_tab = driver.find_element(By.XPATH, "//span[contains(text(),'Hourly')]")
-        hourly_tab.click()
+        # Step 6: Click Hourly tab
+        driver.find_element(By.XPATH, "//span[contains(text(),'Hourly')]").click()
         logging.info("Clicked Hourly tab.")
 
-        # Step 7: Capture the date span text
-        date_span = WebDriverWait(driver, 15).until(
+        # Step 7: Get date
+        date_span = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "span.css-geyj4e"))
         )
         date_text = date_span.text
         logging.info(f"Date captured: {date_text}")
 
-        # Step 8: Capture energy data spans
+        # Step 8: Get data
         energy_generated = driver.find_element(By.XPATH, "//span[contains(text(),'Total Energy Generated')]/following-sibling::span").text
         energy_sold = driver.find_element(By.XPATH, "//span[contains(text(),'Total Energy Sold to APS')]/following-sibling::span").text
         energy_used = driver.find_element(By.XPATH, "//span[contains(text(),'Total APS Energy Used')]/following-sibling::span").text
@@ -82,8 +99,8 @@ def run_scraper():
         logging.info(f"  Total APS Energy Used: {energy_used}")
 
     except Exception as e:
-        logging.error(f"❌ Error during scraping: {e}")
-
+        logging.error(f"❌ Error: {e}")
+        save_debug(driver, "error")
     finally:
         driver.quit()
         logging.info("Browser closed.")
