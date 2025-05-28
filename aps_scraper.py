@@ -34,7 +34,7 @@ def run_scraper():
         driver.find_element(By.ID, "login-submit").click()
 
         WebDriverWait(driver, 15).until(EC.url_contains("dashboard"))
-        driver.get("https://www.aps.com/en/Residential/Account/Usage")
+        driver.get("https://www.aps.com/en/Residential/Account/Overview/Dashboard?origin=usage")
 
         WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Total Energy')]")))
 
