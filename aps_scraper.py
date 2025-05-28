@@ -1,4 +1,5 @@
 import os
+import time
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -33,4 +34,7 @@ def run_scraper():
         print("Browser closed.")
 
 if __name__ == "__main__":
-    run_scraper()
+    while True:
+        run_scraper()
+        print("Pausing for 1 minute before next run...")
+        time.sleep(60)
