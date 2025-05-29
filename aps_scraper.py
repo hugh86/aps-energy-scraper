@@ -2,7 +2,6 @@ import os
 import time
 import json
 import logging
-import paho.mqtt.client as mqtt
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -10,20 +9,22 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from dotenv import load_dotenv
+import paho.mqtt.client as mqtt
 
 load_dotenv()
 
 APS_USERNAME = os.getenv("APS_USERNAME")
 APS_PASSWORD = os.getenv("APS_PASSWORD")
-MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
-MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
-MQTT_USERNAME = os.getenv("MQTT_USERNAME", None)
-MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", None)
-
 LAST_RUN_FILE = "/tmp/aps_scraper_last_run.txt"
 RUN_INTERVAL_SECONDS = 4 * 60 * 60  # 4 hours
 
+MQTT_HOST = "host.docker.internal"
+MQTT_PORT = 1883
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+
 
 def already_ran_recently():
     try:
@@ -33,9 +34,11 @@ def already_ran_recently():
     except:
         return False
 
+
 def save_last_run_time():
     with open(LAST_RUN_FILE, "w") as f:
         f.write(str(time.time()))
+
 
 def wait_for_spinner_to_disappear(driver, timeout=15):
     try:
@@ -44,6 +47,7 @@ def wait_for_spinner_to_disappear(driver, timeout=15):
         )
     except:
         pass
+
 
 def publish_discovery(client, topic_suffix, name, unit, unique_id):
     discovery_topic = f"homeassistant/sensor/aps_energy_{topic_suffix}/config"
@@ -61,6 +65,25 @@ def publish_discovery(client, topic_suffix, name, unit, unique_id):
     }
     client.publish(discovery_topic, json.dumps(payload), retain=True)
 
+
+def publish_to_mqtt(topic, message):
+    client = mqtt.Client(callback_api_version=5, protocol=mqtt.MQTTv5)
+    if MQTT_USERNAME and MQTT_PASSWORD:
+        client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
+    client.connect(MQTT_HOST, MQTT_PORT, 60)
+
+    # Publish Home Assistant discovery messages
+    publish_discovery(client, "generated", "Total Energy Generated", "kWh", "aps_energy_generated")
+    publish_discovery(client, "sold", "Total Energy Sold To APS", "kWh", "aps_energy_sold")
+    publish_discovery(client, "used", "Total APS Energy Used", "kWh", "aps_energy_used")
+
+    # Publish actual values
+    for key, value in message.items():
+        client.publish(f"aps_energy/{key}", value)
+
+    client.disconnect()
+
+
 def run_scraper():
     options = Options()
     options.binary_location = os.getenv("CHROME_BIN", "/usr/bin/chromium")
@@ -74,7 +97,7 @@ def run_scraper():
     try:
         driver.get("https://www.aps.com/Authorization/Login")
 
-        # Cookie banner accept
+        # Cookie banner
         try:
             WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Accept')]"))
@@ -116,34 +139,21 @@ def run_scraper():
         logging.info(f"🔄 Total Energy Sold To APS: {energy_data.get('Total Energy Sold To APS', 'N/A')}")
         logging.info(f"⚡ Total APS Energy Used: {energy_data.get('Total APS Energy Used', 'N/A')}")
 
-        # Setup MQTT client and publish data + discovery
-        client = mqtt.Client(protocol=mqtt.MQTTv5)
-        if MQTT_USERNAME and MQTT_PASSWORD:
-            client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
-        client.connect(MQTT_HOST, MQTT_PORT, 60)
-        client.loop_start()
+        mqtt_payload = {
+            "generated": energy_data.get("Total Energy Generated", "N/A"),
+            "sold": energy_data.get("Total Energy Sold To APS", "N/A"),
+            "used": energy_data.get("Total APS Energy Used", "N/A")
+        }
 
-        # Publish discovery config for Home Assistant MQTT auto-discovery
-        publish_discovery(client, "total_energy_generated", "Total Energy Generated", "kWh", "aps_energy_total_generated")
-        publish_discovery(client, "total_energy_sold_to_aps", "Total Energy Sold To APS", "kWh", "aps_energy_sold_to_aps")
-        publish_discovery(client, "total_aps_energy_used", "Total APS Energy Used", "kWh", "aps_energy_used")
-
-        # Publish actual state data
-        client.publish("aps_energy/total_energy_generated", energy_data.get("Total Energy Generated", "0"), retain=True)
-        client.publish("aps_energy/total_energy_sold_to_aps", energy_data.get("Total Energy Sold To APS", "0"), retain=True)
-        client.publish("aps_energy/total_aps_energy_used", energy_data.get("Total APS Energy Used", "0"), retain=True)
-
-        client.loop_stop()
-        client.disconnect()
+        publish_to_mqtt("aps_energy", mqtt_payload)
 
     except Exception as e:
         logging.error(f"❌ Scraper failed: {e}")
     finally:
         driver.quit()
 
+
 if __name__ == "__main__":
     if not already_ran_recently():
         run_scraper()
         save_last_run_time()
-    else:
-        logging.info("⏳ Already ran recently, skipping this run.")
