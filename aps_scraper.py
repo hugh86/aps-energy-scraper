@@ -141,14 +141,14 @@ def run_scraper():
 def wait_until_target_time():
     now = datetime.now()
 
-    # New run window: 6:15 – 6:25 AM
-    today_start = now.replace(hour=6, minute=15, second=0, microsecond=0)
-    today_end = now.replace(hour=6, minute=25, second=0, microsecond=0)
+    # New run window: 9:10 – 9:20 AM
+    today_start = now.replace(hour=9, minute=10, second=0, microsecond=0)
+    today_end = now.replace(hour=9, minute=20, second=0, microsecond=0)
 
     if now > today_end:
         target_day = now + timedelta(days=1)
-        today_start = target_day.replace(hour=6, minute=15, second=0, microsecond=0)
-        today_end = target_day.replace(hour=6, minute=25, second=0, microsecond=0)
+        today_start = target_day.replace(hour=9, minute=10, second=0, microsecond=0)
+        today_end = target_day.replace(hour=9, minute=20, second=0, microsecond=0)
 
     delta_seconds = int((today_end - today_start).total_seconds())
     random_offset = random.randint(0, delta_seconds)
@@ -163,7 +163,7 @@ def main_loop():
         wait_until_target_time()
         run_scraper()
         now = datetime.now()
-        next_run = (now + timedelta(days=1)).replace(hour=6, minute=15, second=0, microsecond=0)
+        next_run = (now + timedelta(days=1)).replace(hour=9, minute=10, second=0, microsecond=0)
         sleep_seconds = (next_run - now).total_seconds()
         logging.info(f"✅ Run complete. Sleeping {sleep_seconds/3600:.2f} hours until next run.")
         time.sleep(sleep_seconds)
