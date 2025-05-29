@@ -82,7 +82,7 @@ def scrape_aps_data():
         driver.quit()
 
 def publish_to_mqtt(data):
-    client = mqtt.Client(protocol=mqtt.MQTTv5, callback_api_version=5)
+    client = mqtt.Client(protocol=mqtt.MQTTv5)  # Rolled back
     client.connect(MQTT_HOST, MQTT_PORT, 60)
 
     payload = {
