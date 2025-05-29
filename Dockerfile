@@ -27,11 +27,11 @@ ENV CHROMEDRIVER_BIN=/usr/bin/chromedriver
 # Set working directory
 WORKDIR /app
 
-# Copy all project files (including .env if used for dev, but you can exclude it with .dockerignore)
+# Copy all project files
 COPY . /app
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Command to run the scraper
-CMD ["python", "aps_scraper.py"]
+# Add shell entrypoint that waits randomly 0–600s before executing script
+ENTRYPOINT ["sh", "-c", "sleep $(( ( RANDOM % 10 ) * 60 )); python aps_scraper.py"]
