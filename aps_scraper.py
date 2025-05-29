@@ -18,7 +18,7 @@ APS_PASSWORD = os.getenv("APS_PASSWORD")
 LAST_RUN_FILE = "/tmp/aps_scraper_last_run.txt"
 RUN_INTERVAL_SECONDS = 4 * 60 * 60  # 4 hours
 
-MQTT_HOST = 172.17.0.1
+MQTT_HOST = "172.17.0.1"
 MQTT_PORT = 1883
 MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
