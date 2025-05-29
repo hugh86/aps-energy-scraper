@@ -1,49 +1,73 @@
-import os
-import json
-import logging
-import random
 import time
-from datetime import datetime, timedelta
+import paho.mqtt.client as mqtt
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from dotenv import load_dotenv
-import paho.mqtt.client as mqtt
 
-# Load environment variables
-load_dotenv()
+# MQTT Setup
+MQTT_BROKER = "localhost"
+MQTT_PORT = 1883
+MQTT_PREFIX = "homeassistant"
 
-APS_USERNAME = os.getenv("APS_USERNAME")
-APS_PASSWORD = os.getenv("APS_PASSWORD")
+# APS Login Info
+APS_USERNAME = "your_username"
+APS_PASSWORD = "your_password"
 
-MQTT_HOST = os.getenv("MQTT_HOST", "172.17.0.1")
-MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
-MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
-MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
+# Headless browser setup
+chrome_options = Options()
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("--no-sandbox")
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+# Start driver
+driver = webdriver.Chrome(options=chrome_options)
+driver.get("https://www.aps.com/myaccount")
 
-def wait_for_spinner_to_disappear(driver, timeout=15):
-    try:
-        WebDriverWait(driver, timeout).until(
-            EC.invisibility_of_element_located((By.ID, "spinnerFocus"))
-        )
-    except:
-        pass
+try:
+    # Accept cookies if needed
+    WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler"))
+    ).click()
+except:
+    pass  # Cookie banner may not be present
 
-def publish_discovery(client, topic_suffix, name, unit, unique_id):
-    discovery_topic = f"homeassistant/sensor/aps_energy_{topic_suffix}/config"
-    payload = {
+# Login
+WebDriverWait(driver, 15).until(
+    EC.presence_of_element_located((By.ID, "login"))
+).click()
+
+WebDriverWait(driver, 15).until(
+    EC.presence_of_element_located((By.NAME, "username"))
+).send_keys(APS_USERNAME)
+
+driver.find_element(By.NAME, "password").send_keys(APS_PASSWORD)
+driver.find_element(By.NAME, "login-submit").click()
+
+# Wait until the dashboard loads
+WebDriverWait(driver, 20).until(
+    EC.presence_of_element_located((By.CLASS_NAME, "dashboard-usage"))
+)
+
+# Simulated scraping – replace with actual selectors for your usage data
+total_generated = 1234.56  # kWh - scrape this dynamically
+total_exported = 789.01    # kWh
+total_imported = 567.89    # kWh
+
+# MQTT publish helper
+def publish_sensor(client, sensor_id, name, value):
+    state_topic = f"{MQTT_PREFIX}/sensor/{sensor_id}/state"
+    config_topic = f"{MQTT_PREFIX}/sensor/{sensor_id}/config"
+
+    config_payload = {
         "name": name,
-        "state_topic": f"aps_energy/{topic_suffix}",
-        "unit_of_measurement": unit,
+        "state_topic": state_topic,
+        "unit_of_measurement": "kWh",
         "device_class": "energy",
         "state_class": "total_increasing",
         "value_template": "{{ value | float }}",
-        "unique_id": unique_id,
+        "unique_id": sensor_id,
         "device": {
             "identifiers": ["aps_energy_scraper"],
             "name": "APS Energy Scraper",
@@ -51,130 +75,22 @@ def publish_discovery(client, topic_suffix, name, unit, unique_id):
             "model": "Web Scraper"
         }
     }
-    client.publish(discovery_topic, json.dumps(payload), retain=True)
 
-def publish_to_mqtt(message):
-    client = mqtt.Client(protocol=mqtt.MQTTv5)
-    if MQTT_USERNAME and MQTT_PASSWORD:
-        client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
-    client.connect(MQTT_HOST, MQTT_PORT, 60)
+    client.publish(config_topic, json.dumps(config_payload), retain=True)
+    client.publish(state_topic, value, retain=True)
 
-    # Publish discovery messages
-    publish_discovery(client, "generated", "Total Energy Generated", "kWh", "aps_energy_generated")
-    publish_discovery(client, "sold", "Total Energy Sold To APS", "kWh", "aps_energy_sold")
-    publish_discovery(client, "used", "Total APS Energy Used", "kWh", "aps_energy_used")
-    publish_discovery(client, "own_used", "Total APS Energy Own Used", "kWh", "aps_energy_own_used")
+# Connect to MQTT and publish data
+import json
+client = mqtt.Client()
+client.connect(MQTT_BROKER, MQTT_PORT, 60)
+client.loop_start()
 
-    logging.info(f"📤 Publishing to MQTT: {message}")
+publish_sensor(client, "aps_energy_generated", "Total Energy Generated", total_generated)
+publish_sensor(client, "aps_energy_exported", "Total Energy Sold to APS", total_exported)
+publish_sensor(client, "aps_energy_imported", "Total APS Energy Used", total_imported)
 
-    for key, value in message.items():
-        client.publish(f"aps_energy/{key}", value, retain=True)
+client.loop_stop()
+client.disconnect()
 
-    client.disconnect()
-
-def run_scraper():
-    options = Options()
-    options.binary_location = os.getenv("CHROME_BIN", "/usr/bin/chromium")
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-
-    service = Service(os.getenv("CHROMEDRIVER_BIN", "/usr/bin/chromedriver"))
-    driver = webdriver.Chrome(service=service, options=options)
-
-    try:
-        driver.get("https://www.aps.com/Authorization/Login")
-
-        try:
-            WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Accept')]"))
-            ).click()
-        except:
-            pass
-
-        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "emailAddress")))
-        driver.find_element(By.ID, "emailAddress").send_keys(APS_USERNAME)
-        driver.find_element(By.ID, "password").send_keys(APS_PASSWORD)
-        driver.find_element(By.XPATH, "//button[@aria-label='Sign In' or contains(text(),'Sign In')]").click()
-
-        WebDriverWait(driver, 30).until(EC.url_contains("/Dashboard"))
-        logging.info("✅ Successfully logged in.")
-
-        driver.get("https://www.aps.com/en/Residential/Account/Overview/Dashboard?origin=usage")
-        wait_for_spinner_to_disappear(driver)
-
-        WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'Hourly')]"))).click()
-        wait_for_spinner_to_disappear(driver)
-
-        date_text = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "span.css-geyj4e"))
-        ).text
-
-        container = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div.css-6req3m > div.css-15bvg19"))
-        )
-        data_spans = container.find_elements(By.CSS_SELECTOR, "span.css-1c4vfd5")
-
-        energy_data = {}
-        for span in data_spans:
-            value = span.find_element(By.CSS_SELECTOR, "span.css-pzpy3e").text.strip()
-            label = span.find_element(By.CSS_SELECTOR, "span.css-1wwo9nq").text.strip()
-            energy_data[label] = value
-
-        generated = float(energy_data.get("Total Energy Generated", "0").replace(",", ""))
-        sold = float(energy_data.get("Total Energy Sold To APS", "0").replace(",", ""))
-        used = float(energy_data.get("Total APS Energy Used", "0").replace(",", ""))
-        own_used = generated - sold
-
-        logging.info(f"📆 Date: {date_text}")
-        logging.info(f"🔋 Total Energy Generated: {generated}")
-        logging.info(f"🔄 Total Energy Sold To APS: {sold}")
-        logging.info(f"⚡ Total APS Energy Used: {used}")
-        logging.info(f"🏠 Total APS Energy Own Used: {own_used}")
-
-        mqtt_payload = {
-            "generated": f"{generated:.2f}",
-            "sold": f"{sold:.2f}",
-            "used": f"{used:.2f}",
-            "own_used": f"{own_used:.2f}"
-        }
-
-        publish_to_mqtt(mqtt_payload)
-
-    except Exception as e:
-        logging.error(f"❌ Scraper failed: {e}")
-    finally:
-        driver.quit()
-
-def wait_until_target_time():
-    now = datetime.now()
-
-    # New run window: 3:30 – 4:00 PM
-    today_start = now.replace(hour=15, minute=30, second=0, microsecond=0)
-    today_end = now.replace(hour=16, minute=0, second=0, microsecond=0)
-
-    if now > today_end:
-        target_day = now + timedelta(days=1)
-        today_start = target_day.replace(hour=15, minute=30, second=0, microsecond=0)
-        today_end = target_day.replace(hour=16, minute=0, second=0, microsecond=0)
-
-    delta_seconds = int((today_end - today_start).total_seconds())
-    random_offset = random.randint(0, delta_seconds)
-    run_time = today_start + timedelta(seconds=random_offset)
-
-    wait_seconds = max(0, (run_time - now).total_seconds())
-    logging.info(f"⏳ Waiting {wait_seconds:.0f} seconds until next run at {run_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    time.sleep(wait_seconds)
-
-def main_loop():
-    while True:
-        wait_until_target_time()
-        run_scraper()
-        now = datetime.now()
-        next_run = (now + timedelta(days=1)).replace(hour=15, minute=30, second=0, microsecond=0)
-        sleep_seconds = (next_run - now).total_seconds()
-        logging.info(f"✅ Run complete. Sleeping {sleep_seconds/3600:.2f} hours until next run.")
-        time.sleep(sleep_seconds)
-
-if __name__ == "__main__":
-    main_loop()
+# Cleanup
+driver.quit()
