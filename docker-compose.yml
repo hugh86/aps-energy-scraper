@@ -7,6 +7,16 @@ services:
     environment:
       - APS_USERNAME=${APS_USERNAME}
       - APS_PASSWORD=${APS_PASSWORD}
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - MQTT_USERNAME=${MQTT_USERNAME}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
+    working_dir: /app
+    volumes:
+      - ./aps_scraper.py:/app/aps_scraper.py
+      - ./requirements.txt:/app/requirements.txt
+    entrypoint: >
+      sh -c "sleep $(( ( RANDOM % 10 ) * 60 )) && python3 aps_scraper.py"
     restart: unless-stopped
     depends_on:
       - mosquitto
