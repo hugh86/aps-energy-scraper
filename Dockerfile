@@ -27,11 +27,12 @@ ENV CHROMEDRIVER_BIN=/usr/bin/chromedriver
 # Set working directory
 WORKDIR /app
 
-# Copy all project files
-COPY . /app
-
-# Install Python dependencies
+# Copy only the requirements first to cache pip install
+COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Now copy the rest of the project files
+COPY . /app
+
 # Add shell entrypoint that waits randomly 0–600s before executing script
-ENTRYPOINT ["sh", "-c", "sleep $(( ( RANDOM % 10 ) * 60 )); python aps_scraper.py"]
+ENTRYPOINT ["sh", "-c", "sleep $(( RANDOM % 601 )); exec python aps_scraper.py"]
