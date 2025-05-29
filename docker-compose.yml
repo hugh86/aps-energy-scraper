@@ -5,6 +5,8 @@ services:
     build: .
     container_name: aps-energy-scraper
     environment:
+      environment:
+      - TZ=America/Phoenix
       - APS_USERNAME=${APS_USERNAME}
       - APS_PASSWORD=${APS_PASSWORD}
       - MQTT_HOST=mosquitto
