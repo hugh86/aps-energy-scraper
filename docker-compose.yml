@@ -13,10 +13,13 @@ services:
       - mosquitto
 
   mosquitto:
-  image: eclipse-mosquitto
-  container_name: mosquitto
-  restart: unless-stopped
-  network_mode: host
-  volumes:
-    - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
-    - mosquitto_data:/mosquitto/data
+    image: eclipse-mosquitto
+    container_name: mosquitto
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+
+volumes:
+  mosquitto_data:
