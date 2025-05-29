@@ -141,20 +141,20 @@ def run_scraper():
 def wait_until_target_time():
     now = datetime.now()
 
-    # Define earliest and latest run times today (7:30 and 7:40 AM)
-    today_730 = now.replace(hour=7, minute=30, second=0, microsecond=0)
-    today_740 = now.replace(hour=7, minute=40, second=0, microsecond=0)
+    # Define earliest and latest run times today (6:00 and 6:10 AM)
+    today_600 = now.replace(hour=6, minute=0, second=0, microsecond=0)
+    today_610 = now.replace(hour=6, minute=10, second=0, microsecond=0)
 
-    if now > today_740:
-        # If current time is after 7:40 AM, schedule for tomorrow 7:30-7:40
+    if now > today_610:
+        # If current time is after 6:10 AM, schedule for tomorrow 6:00–6:10
         target_day = now + timedelta(days=1)
-        today_730 = target_day.replace(hour=7, minute=30, second=0, microsecond=0)
-        today_740 = target_day.replace(hour=7, minute=40, second=0, microsecond=0)
+        today_600 = target_day.replace(hour=6, minute=0, second=0, microsecond=0)
+        today_610 = target_day.replace(hour=6, minute=10, second=0, microsecond=0)
 
-    # Pick random time between 7:30 and 7:40
-    delta_seconds = int((today_740 - today_730).total_seconds())
+    # Pick random time between 6:00 and 6:10
+    delta_seconds = int((today_610 - today_600).total_seconds())
     random_offset = random.randint(0, delta_seconds)
-    run_time = today_730 + timedelta(seconds=random_offset)
+    run_time = today_600 + timedelta(seconds=random_offset)
 
     wait_seconds = (run_time - now).total_seconds()
     logging.info(f"Waiting {wait_seconds:.0f} seconds until next run at {run_time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -164,9 +164,9 @@ def main_loop():
     while True:
         wait_until_target_time()
         run_scraper()
-        # Sleep until next day’s 7:30 AM (minimum ~21h)
+        # Sleep until next day’s 6:00 AM
         now = datetime.now()
-        next_run = (now + timedelta(days=1)).replace(hour=7, minute=30, second=0, microsecond=0)
+        next_run = (now + timedelta(days=1)).replace(hour=6, minute=0, second=0, microsecond=0)
         sleep_seconds = (next_run - now).total_seconds()
         logging.info(f"Run complete. Sleeping {sleep_seconds/3600:.2f} hours until next scheduled run.")
         time.sleep(sleep_seconds)
