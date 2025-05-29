@@ -67,7 +67,7 @@ def publish_to_mqtt(message):
     logging.info(f"📤 Publishing to MQTT: {message}")
 
     for key, value in message.items():
-        client.publish(f"aps_energy/{key}", value)
+        client.publish(f"aps_energy/{key}", value, retain=True)
 
     client.disconnect()
 
