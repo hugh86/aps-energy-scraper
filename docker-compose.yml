@@ -19,7 +19,6 @@ services:
     network_mode: host
     volumes:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
-      - mosquitto_data:/mosquitto/data
 
 volumes:
   mosquitto_data:
