@@ -41,7 +41,7 @@ def publish_discovery(client, topic_suffix, name, unit, unique_id):
         "state_topic": f"aps_energy/{topic_suffix}",
         "unit_of_measurement": unit,
         "device_class": "energy",
-        "state_class": "total",  # ✅ Needed for Energy Dashboard
+        "state_class": "total",
         "value_template": "{{ value | float }}",
         "unique_id": unique_id,
         "device": {
@@ -64,7 +64,8 @@ def publish_to_mqtt(message):
     publish_discovery(client, "sold", "Total Energy Sold To APS", "kWh", "aps_energy_sold")
     publish_discovery(client, "used", "Total APS Energy Used", "kWh", "aps_energy_used")
 
-    # Publish sensor values
+    logging.info(f"📤 Publishing to MQTT: {message}")
+
     for key, value in message.items():
         client.publish(f"aps_energy/{key}", value)
 
@@ -83,7 +84,6 @@ def run_scraper():
     try:
         driver.get("https://www.aps.com/Authorization/Login")
 
-        # Accept cookie banner
         try:
             WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Accept')]"))
@@ -141,34 +141,31 @@ def run_scraper():
 def wait_until_target_time():
     now = datetime.now()
 
-    # Define earliest and latest run times today (6:00 and 6:10 AM)
-    today_600 = now.replace(hour=6, minute=0, second=0, microsecond=0)
-    today_610 = now.replace(hour=6, minute=10, second=0, microsecond=0)
+    # New run window: 6:15 – 6:25 AM
+    today_start = now.replace(hour=6, minute=15, second=0, microsecond=0)
+    today_end = now.replace(hour=6, minute=25, second=0, microsecond=0)
 
-    if now > today_610:
-        # If current time is after 6:10 AM, schedule for tomorrow 6:00–6:10
+    if now > today_end:
         target_day = now + timedelta(days=1)
-        today_600 = target_day.replace(hour=6, minute=0, second=0, microsecond=0)
-        today_610 = target_day.replace(hour=6, minute=10, second=0, microsecond=0)
+        today_start = target_day.replace(hour=6, minute=15, second=0, microsecond=0)
+        today_end = target_day.replace(hour=6, minute=25, second=0, microsecond=0)
 
-    # Pick random time between 6:00 and 6:10
-    delta_seconds = int((today_610 - today_600).total_seconds())
+    delta_seconds = int((today_end - today_start).total_seconds())
     random_offset = random.randint(0, delta_seconds)
-    run_time = today_600 + timedelta(seconds=random_offset)
+    run_time = today_start + timedelta(seconds=random_offset)
 
     wait_seconds = (run_time - now).total_seconds()
-    logging.info(f"Waiting {wait_seconds:.0f} seconds until next run at {run_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    logging.info(f"⏳ Waiting {wait_seconds:.0f} seconds until next run at {run_time.strftime('%Y-%m-%d %H:%M:%S')}")
     time.sleep(wait_seconds)
 
 def main_loop():
     while True:
         wait_until_target_time()
         run_scraper()
-        # Sleep until next day’s 6:00 AM
         now = datetime.now()
-        next_run = (now + timedelta(days=1)).replace(hour=6, minute=0, second=0, microsecond=0)
+        next_run = (now + timedelta(days=1)).replace(hour=6, minute=15, second=0, microsecond=0)
         sleep_seconds = (next_run - now).total_seconds()
-        logging.info(f"Run complete. Sleeping {sleep_seconds/3600:.2f} hours until next scheduled run.")
+        logging.info(f"✅ Run complete. Sleeping {sleep_seconds/3600:.2f} hours until next run.")
         time.sleep(sleep_seconds)
 
 if __name__ == "__main__":
