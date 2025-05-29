@@ -1,6 +1,9 @@
 import os
 import json
 import logging
+import random
+import time
+from datetime import datetime, timedelta
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -98,7 +101,7 @@ def run_scraper():
         driver.get("https://www.aps.com/en/Residential/Account/Overview/Dashboard?origin=usage")
         wait_for_spinner_to_disappear(driver)
 
-        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, "//span[contains(text(),'Hourly')]"))).click()
+        WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'Hourly')]"))).click()
         wait_for_spinner_to_disappear(driver)
 
         date_text = WebDriverWait(driver, 15).until(
@@ -134,5 +137,38 @@ def run_scraper():
     finally:
         driver.quit()
 
+def wait_until_target_time():
+    now = datetime.now()
+
+    # Define earliest and latest run times today (7:30 and 7:40 AM)
+    today_730 = now.replace(hour=7, minute=30, second=0, microsecond=0)
+    today_740 = now.replace(hour=7, minute=40, second=0, microsecond=0)
+
+    if now > today_740:
+        # If current time is after 7:40 AM, schedule for tomorrow 7:30-7:40
+        target_day = now + timedelta(days=1)
+        today_730 = target_day.replace(hour=7, minute=30, second=0, microsecond=0)
+        today_740 = target_day.replace(hour=7, minute=40, second=0, microsecond=0)
+
+    # Pick random time between 7:30 and 7:40
+    delta_seconds = int((today_740 - today_730).total_seconds())
+    random_offset = random.randint(0, delta_seconds)
+    run_time = today_730 + timedelta(seconds=random_offset)
+
+    wait_seconds = (run_time - now).total_seconds()
+    logging.info(f"Waiting {wait_seconds:.0f} seconds until next run at {run_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    time.sleep(wait_seconds)
+
+def main_loop():
+    while True:
+        wait_until_target_time()
+        run_scraper()
+        # Sleep until next day’s 7:30 AM (minimum ~21h)
+        now = datetime.now()
+        next_run = (now + timedelta(days=1)).replace(hour=7, minute=30, second=0, microsecond=0)
+        sleep_seconds = (next_run - now).total_seconds()
+        logging.info(f"Run complete. Sleeping {sleep_seconds/3600:.2f} hours until next scheduled run.")
+        time.sleep(sleep_seconds)
+
 if __name__ == "__main__":
-    run_scraper()
+    main_loop()
