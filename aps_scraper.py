@@ -41,7 +41,7 @@ def publish_discovery(client, topic_suffix, name, unit, unique_id):
         "state_topic": f"aps_energy/{topic_suffix}",
         "unit_of_measurement": unit,
         "device_class": "energy",
-        "state_class": "total",
+        "state_class": "total_increasing",
         "value_template": "{{ value | float }}",
         "unique_id": unique_id,
         "device": {
@@ -149,14 +149,14 @@ def run_scraper():
 def wait_until_target_time():
     now = datetime.now()
 
-    # New run window: 6:30 – 6:40 AM
-    today_start = now.replace(hour=6, minute=30, second=0, microsecond=0)
-    today_end = now.replace(hour=6, minute=40, second=0, microsecond=0)
+    # New run window: 3:30 – 4:00 PM
+    today_start = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    today_end = now.replace(hour=16, minute=0, second=0, microsecond=0)
 
     if now > today_end:
         target_day = now + timedelta(days=1)
-        today_start = target_day.replace(hour=6, minute=30, second=0, microsecond=0)
-        today_end = target_day.replace(hour=6, minute=40, second=0, microsecond=0)
+        today_start = target_day.replace(hour=15, minute=30, second=0, microsecond=0)
+        today_end = target_day.replace(hour=16, minute=0, second=0, microsecond=0)
 
     delta_seconds = int((today_end - today_start).total_seconds())
     random_offset = random.randint(0, delta_seconds)
@@ -171,7 +171,7 @@ def main_loop():
         wait_until_target_time()
         run_scraper()
         now = datetime.now()
-        next_run = (now + timedelta(days=1)).replace(hour=6, minute=30, second=0, microsecond=0)
+        next_run = (now + timedelta(days=1)).replace(hour=15, minute=30, second=0, microsecond=0)
         sleep_seconds = (next_run - now).total_seconds()
         logging.info(f"✅ Run complete. Sleeping {sleep_seconds/3600:.2f} hours until next run.")
         time.sleep(sleep_seconds)
