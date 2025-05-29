@@ -41,6 +41,7 @@ def publish_discovery(client, topic_suffix, name, unit, unique_id):
         "state_topic": f"aps_energy/{topic_suffix}",
         "unit_of_measurement": unit,
         "device_class": "energy",
+        "state_class": "total",  # ✅ Needed for Energy Dashboard
         "value_template": "{{ value | float }}",
         "unique_id": unique_id,
         "device": {
