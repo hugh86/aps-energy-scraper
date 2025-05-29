@@ -10,6 +10,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from dotenv import load_dotenv
 import paho.mqtt.client as mqtt
+from paho.mqtt.client import CallbackAPIVersion  # ✅ FIXED: import the enum
 
 load_dotenv()
 
@@ -67,7 +68,10 @@ def publish_discovery(client, topic_suffix, name, unit, unique_id):
 
 
 def publish_to_mqtt(topic, message):
-    client = mqtt.Client(callback_api_version=5, protocol=mqtt.MQTTv5)
+    client = mqtt.Client(
+        callback_api_version=CallbackAPIVersion.V5,  # ✅ FIXED: use enum
+        protocol=mqtt.MQTTv5
+    )
     if MQTT_USERNAME and MQTT_PASSWORD:
         client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
     client.connect(MQTT_HOST, MQTT_PORT, 60)
