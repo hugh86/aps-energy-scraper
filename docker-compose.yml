@@ -18,6 +18,8 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-volumes:
-      - /data/compose/13/mosquitto.conf/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - /data/compose/13/mosquitto.conf:/mosquitto/config/mosquitto.conf
       - mosquitto_data:/mosquitto/data
+
+volumes:
+  mosquitto_data:
