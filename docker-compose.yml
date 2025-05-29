@@ -12,8 +12,7 @@ services:
       - MQTT_USERNAME=${MQTT_USERNAME}
       - MQTT_PASSWORD=${MQTT_PASSWORD}
     working_dir: /app
-    volumes:
-      - ./requirements.txt:/app/requirements.txt
+    
     entrypoint: >
       sh -c "sleep $(( ( RANDOM % 10 ) * 60 )) && python3 aps_scraper.py"
     restart: unless-stopped
