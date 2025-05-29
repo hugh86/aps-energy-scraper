@@ -4,7 +4,6 @@ services:
   aps-scraper:
     build: .
     container_name: aps-energy-scraper
-    network_mode: host
     environment:
       - APS_USERNAME=${APS_USERNAME}
       - APS_PASSWORD=${APS_PASSWORD}
@@ -16,7 +15,8 @@ services:
     image: eclipse-mosquitto
     container_name: mosquitto
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "1883:1883"
     volumes:
       - /data/compose/13/mosquitto.conf:/mosquitto/config
       - mosquitto_data:/mosquitto/data
