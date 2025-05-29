@@ -10,20 +10,16 @@ services:
       - APS_PASSWORD=${APS_PASSWORD}
     restart: unless-stopped
     depends_on:
-      - mosquitto  # Ensure broker is up before scraper tries to connect
+      - mosquitto
 
   mosquitto:
     image: eclipse-mosquitto
     container_name: mosquitto
     restart: unless-stopped
     network_mode: host
-    ports:
-      - "1883:1883"     # MQTT port
-      - "9001:9001"     # WebSockets (optional)
     volumes:
-      - mosquitto_config:/mosquitto/config
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
       - mosquitto_data:/mosquitto/data
 
 volumes:
-  mosquitto_config:
   mosquitto_data:
