@@ -4,6 +4,7 @@ services:
   aps-scraper:
     build: .
     container_name: aps-energy-scraper
+    network_mode: host
     environment:
       - APS_USERNAME=${APS_USERNAME}
       - APS_PASSWORD=${APS_PASSWORD}
