@@ -63,6 +63,7 @@ def publish_to_mqtt(message):
     publish_discovery(client, "generated", "Total Energy Generated", "kWh", "aps_energy_generated")
     publish_discovery(client, "sold", "Total Energy Sold To APS", "kWh", "aps_energy_sold")
     publish_discovery(client, "used", "Total APS Energy Used", "kWh", "aps_energy_used")
+    publish_discovery(client, "own_used", "Total APS Energy Own Used", "kWh", "aps_energy_own_used")
 
     logging.info(f"📤 Publishing to MQTT: {message}")
 
@@ -120,15 +121,22 @@ def run_scraper():
             label = span.find_element(By.CSS_SELECTOR, "span.css-1wwo9nq").text.strip()
             energy_data[label] = value
 
+        generated = float(energy_data.get("Total Energy Generated", "0").replace(",", ""))
+        sold = float(energy_data.get("Total Energy Sold To APS", "0").replace(",", ""))
+        used = float(energy_data.get("Total APS Energy Used", "0").replace(",", ""))
+        own_used = generated - sold
+
         logging.info(f"📆 Date: {date_text}")
-        logging.info(f"🔋 Total Energy Generated: {energy_data.get('Total Energy Generated', 'N/A')}")
-        logging.info(f"🔄 Total Energy Sold To APS: {energy_data.get('Total Energy Sold To APS', 'N/A')}")
-        logging.info(f"⚡ Total APS Energy Used: {energy_data.get('Total APS Energy Used', 'N/A')}")
+        logging.info(f"🔋 Total Energy Generated: {generated}")
+        logging.info(f"🔄 Total Energy Sold To APS: {sold}")
+        logging.info(f"⚡ Total APS Energy Used: {used}")
+        logging.info(f"🏠 Total APS Energy Own Used: {own_used}")
 
         mqtt_payload = {
-            "generated": energy_data.get("Total Energy Generated", "0"),
-            "sold": energy_data.get("Total Energy Sold To APS", "0"),
-            "used": energy_data.get("Total APS Energy Used", "0")
+            "generated": f"{generated:.2f}",
+            "sold": f"{sold:.2f}",
+            "used": f"{used:.2f}",
+            "own_used": f"{own_used:.2f}"
         }
 
         publish_to_mqtt(mqtt_payload)
@@ -141,14 +149,14 @@ def run_scraper():
 def wait_until_target_time():
     now = datetime.now()
 
-    # Run window: 09:50 – 10:00 AM
-    today_start = now.replace(hour=9, minute=50, second=0, microsecond=0)
-    today_end = now.replace(hour=10, minute=0, second=0, microsecond=0)
+    # New run window: 10:00 – 10:15 AM
+    today_start = now.replace(hour=10, minute=0, second=0, microsecond=0)
+    today_end = now.replace(hour=10, minute=15, second=0, microsecond=0)
 
     if now > today_end:
         target_day = now + timedelta(days=1)
-        today_start = target_day.replace(hour=9, minute=50, second=0, microsecond=0)
-        today_end = target_day.replace(hour=10, minute=0, second=0, microsecond=0)
+        today_start = target_day.replace(hour=10, minute=0, second=0, microsecond=0)
+        today_end = target_day.replace(hour=10, minute=15, second=0, microsecond=0)
 
     delta_seconds = int((today_end - today_start).total_seconds())
     random_offset = random.randint(0, delta_seconds)
@@ -163,7 +171,7 @@ def main_loop():
         wait_until_target_time()
         run_scraper()
         now = datetime.now()
-        next_run = (now + timedelta(days=1)).replace(hour=9, minute=50, second=0, microsecond=0)
+        next_run = (now + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
         sleep_seconds = (next_run - now).total_seconds()
         logging.info(f"✅ Run complete. Sleeping {sleep_seconds/3600:.2f} hours until next run.")
         time.sleep(sleep_seconds)
