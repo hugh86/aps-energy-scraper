@@ -1,17 +1,18 @@
 import os
 import json
 import logging
-import random
-import time
-from datetime import datetime, timedelta
+from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from dotenv import load_dotenv
 import paho.mqtt.client as mqtt
+from datetime import datetime, timedelta
+import time
+
+from runtime_controller import wait_until_random_time
 
 # Load environment variables
 load_dotenv()
@@ -59,14 +60,12 @@ def publish_to_mqtt(message):
         client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
     client.connect(MQTT_HOST, MQTT_PORT, 60)
 
-    # Publish discovery messages
     publish_discovery(client, "generated", "Total Energy Generated", "kWh", "aps_energy_generated")
     publish_discovery(client, "sold", "Total Energy Sold To APS", "kWh", "aps_energy_sold")
     publish_discovery(client, "used", "Total APS Energy Used", "kWh", "aps_energy_used")
     publish_discovery(client, "own_used", "Total APS Energy Own Used", "kWh", "aps_energy_own_used")
 
     logging.info(f"📤 Publishing to MQTT: {message}")
-
     for key, value in message.items():
         client.publish(f"aps_energy/{key}", value, retain=True)
 
@@ -146,34 +145,13 @@ def run_scraper():
     finally:
         driver.quit()
 
-def wait_until_target_time():
-    now = datetime.now()
-
-    # New run window: 3:30 – 4:00 PM
-    today_start = now.replace(hour=6, minute=30, second=0, microsecond=0)
-    today_end = now.replace(hour=6, minute=40, second=0, microsecond=0)
-
-    if now > today_end:
-        target_day = now + timedelta(days=1)
-        today_start = target_day.replace(hour=6, minute=30, second=0, microsecond=0)
-        today_end = target_day.replace(hour=6, minute=40, second=0, microsecond=0)
-
-    delta_seconds = int((today_end - today_start).total_seconds())
-    random_offset = random.randint(0, delta_seconds)
-    run_time = today_start + timedelta(seconds=random_offset)
-
-    wait_seconds = max(0, (run_time - now).total_seconds())
-    logging.info(f"⏳ Waiting {wait_seconds:.0f} seconds until next run at {run_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    time.sleep(wait_seconds)
-
 def main_loop():
     while True:
-        wait_until_target_time()
+        wait_until_random_time(7, 30, 7, 40)
         run_scraper()
-        now = datetime.now()
-        next_run = (now + timedelta(days=1)).replace(hour=6, minute=30, second=0, microsecond=0)
-        sleep_seconds = (next_run - now).total_seconds()
-        logging.info(f"✅ Run complete. Sleeping {sleep_seconds/3600:.2f} hours until next run.")
+        next_run = (datetime.now() + timedelta(days=1)).replace(hour=7, minute=30, second=0, microsecond=0)
+        sleep_seconds = (next_run - datetime.now()).total_seconds()
+        logging.info(f"✅ Run complete. Sleeping {sleep_seconds / 3600:.2f} hours until next run.")
         time.sleep(sleep_seconds)
 
 if __name__ == "__main__":
