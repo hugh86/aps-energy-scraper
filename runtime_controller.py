@@ -4,7 +4,7 @@ import random
 import logging
 from datetime import datetime, timedelta
 
-def wait_until_random_time(start_hour=7, start_minute=30, end_hour=7, end_minute=40):
+def wait_until_random_time(start_hour=6, start_minute=50, end_hour=7, end_minute=40):
     now = datetime.now()
 
     # Define today's time window
