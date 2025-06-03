@@ -146,11 +146,19 @@ def run_scraper():
         driver.quit()
 
 def main_loop():
+    # Run scraper once immediately at start
+    run_scraper()
+    
     while True:
-        wait_until_random_time(16, 30, 5, 40)
+        # Wait until a random time between 6:30 and 7:40
+        wait_until_random_time(6, 30, 7, 40)
+        
         run_scraper()
-        next_run = (datetime.now() + timedelta(days=1)).replace(hour=16, minute=30, second=0, microsecond=0)
+        
+        # Calculate next run at 6:30 AM next day
+        next_run = (datetime.now() + timedelta(days=1)).replace(hour=6, minute=30, second=0, microsecond=0)
         sleep_seconds = (next_run - datetime.now()).total_seconds()
+        
         logging.info(f"✅ Run complete. Sleeping {sleep_seconds / 3600:.2f} hours until next run.")
         time.sleep(sleep_seconds)
 
