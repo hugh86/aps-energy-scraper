@@ -147,9 +147,9 @@ def run_scraper():
 
 def main_loop():
     while True:
-        wait_until_random_time(7, 30, 8, 40)
+        wait_until_random_time(16, 30, 5, 40)
         run_scraper()
-        next_run = (datetime.now() + timedelta(days=1)).replace(hour=7, minute=30, second=0, microsecond=0)
+        next_run = (datetime.now() + timedelta(days=1)).replace(hour=16, minute=30, second=0, microsecond=0)
         sleep_seconds = (next_run - datetime.now()).total_seconds()
         logging.info(f"✅ Run complete. Sleeping {sleep_seconds / 3600:.2f} hours until next run.")
         time.sleep(sleep_seconds)
