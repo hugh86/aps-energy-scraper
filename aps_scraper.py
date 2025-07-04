@@ -14,6 +14,20 @@ import time
 
 from runtime_controller import wait_until_random_time
 
+
+ENERGY_TOTALS_FILE = "energy_totals.json"
+
+def load_totals():
+    if os.path.exists(ENERGY_TOTALS_FILE):
+        with open(ENERGY_TOTALS_FILE, "r") as f:
+            return json.load(f)
+    return {"generated": 0.0, "sold": 0.0, "used": 0.0}
+
+def save_totals(totals):
+    with open(ENERGY_TOTALS_FILE, "w") as f:
+        json.dump(totals, f)
+
+
 # Load environment variables
 load_dotenv()
 
