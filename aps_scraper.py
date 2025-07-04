@@ -14,7 +14,6 @@ import time
 
 from runtime_controller import wait_until_random_time
 
-
 ENERGY_TOTALS_FILE = "energy_totals.json"
 
 def load_totals():
@@ -26,7 +25,6 @@ def load_totals():
 def save_totals(totals):
     with open(ENERGY_TOTALS_FILE, "w") as f:
         json.dump(totals, f)
-
 
 # Load environment variables
 load_dotenv()
@@ -69,7 +67,7 @@ def publish_discovery(client, topic_suffix, name, unit, unique_id):
     client.publish(discovery_topic, json.dumps(payload), retain=True)
 
 def publish_to_mqtt(message):
-    client = mqtt.Client(protocol=mqtt.MQTTv5)
+    client = mqtt.Client(protocol=mqtt.MQTTv5, callback_api_version=5)
     if MQTT_USERNAME and MQTT_PASSWORD:
         client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
     client.connect(MQTT_HOST, MQTT_PORT, 60)
@@ -145,11 +143,19 @@ def run_scraper():
         logging.info(f"⚡ Total APS Energy Used: {used}")
         logging.info(f"🏠 Total APS Energy Own Used: {own_used}")
 
+        # Load, update, and save cumulative totals
+        totals = load_totals()
+        totals["generated"] += generated
+        totals["sold"] += sold
+        totals["used"] += used
+        totals["own_used"] = totals["generated"] - totals["sold"]
+        save_totals(totals)
+
         mqtt_payload = {
-            "generated": f"{generated:.2f}",
-            "sold": f"{sold:.2f}",
-            "used": f"{used:.2f}",
-            "own_used": f"{own_used:.2f}"
+            "generated": f"{totals['generated']:.2f}",
+            "sold": f"{totals['sold']:.2f}",
+            "used": f"{totals['used']:.2f}",
+            "own_used": f"{totals['own_used']:.2f}"
         }
 
         publish_to_mqtt(mqtt_payload)
@@ -160,19 +166,13 @@ def run_scraper():
         driver.quit()
 
 def main_loop():
-    # Run scraper once immediately at start
     run_scraper()
-    
+
     while True:
-        # Wait until a random time between 6:30 and 7:40
         wait_until_random_time(6, 30, 7, 40)
-        
         run_scraper()
-        
-        # Calculate next run at 6:30 AM next day
         next_run = (datetime.now() + timedelta(days=1)).replace(hour=6, minute=30, second=0, microsecond=0)
         sleep_seconds = (next_run - datetime.now()).total_seconds()
-        
         logging.info(f"✅ Run complete. Sleeping {sleep_seconds / 3600:.2f} hours until next run.")
         time.sleep(sleep_seconds)
 
