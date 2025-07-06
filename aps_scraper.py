@@ -67,7 +67,7 @@ def publish_discovery(client, topic_suffix, name, unit, unique_id):
     client.publish(discovery_topic, json.dumps(payload), retain=True)
 
 def publish_to_mqtt(message):
-    client = mqtt.Client(protocol=mqtt.MQTTv311)  # ✅ Fixed: use MQTT 3.1.1 only
+    client = mqtt.Client(protocol=mqtt.MQTTv311)
     if MQTT_USERNAME and MQTT_PASSWORD:
         client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
     client.connect(MQTT_HOST, MQTT_PORT, 60)
@@ -114,23 +114,46 @@ def run_scraper():
         driver.get("https://www.aps.com/en/Residential/Account/Overview/Dashboard?origin=usage")
         wait_for_spinner_to_disappear(driver)
 
-        WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'Hourly')]"))).click()
-        wait_for_spinner_to_disappear(driver)
+        try:
+            logging.info("🔍 Clicking 'Hourly' view...")
+            WebDriverWait(driver, 15).until(EC.element_to_be_clickable(
+                (By.XPATH, "//span[contains(text(),'Hourly')]"))
+            ).click()
+            wait_for_spinner_to_disappear(driver)
+        except Exception as e:
+            logging.error("❌ Failed to click on 'Hourly' tab.")
+            driver.save_screenshot("error_screenshot.png")
+            raise e
 
-        date_text = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "span.css-geyj4e"))
-        ).text
+        try:
+            logging.info("🔍 Waiting for date element...")
+            date_text = WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "span.css-geyj4e"))
+            ).text
+        except Exception as e:
+            logging.error("❌ Failed to get the date label.")
+            driver.save_screenshot("error_screenshot.png")
+            raise e
 
-        container = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div.css-6req3m > div.css-15bvg19"))
-        )
-        data_spans = container.find_elements(By.CSS_SELECTOR, "span.css-1c4vfd5")
+        try:
+            logging.info("🔍 Waiting for data container...")
+            container = WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "div.css-6req3m > div.css-15bvg19"))
+            )
+            data_spans = container.find_elements(By.CSS_SELECTOR, "span.css-1c4vfd5")
+        except Exception as e:
+            logging.error("❌ Failed to get data container or spans.")
+            driver.save_screenshot("error_screenshot.png")
+            raise e
 
         energy_data = {}
         for span in data_spans:
-            value = span.find_element(By.CSS_SELECTOR, "span.css-pzpy3e").text.strip()
-            label = span.find_element(By.CSS_SELECTOR, "span.css-1wwo9nq").text.strip()
-            energy_data[label] = value
+            try:
+                value = span.find_element(By.CSS_SELECTOR, "span.css-pzpy3e").text.strip()
+                label = span.find_element(By.CSS_SELECTOR, "span.css-1wwo9nq").text.strip()
+                energy_data[label] = value
+            except Exception:
+                logging.warning("⚠️ Skipped a span due to missing elements.")
 
         generated = float(energy_data.get("Total Energy Generated", "0").replace(",", ""))
         sold = float(energy_data.get("Total Energy Sold To APS", "0").replace(",", ""))
@@ -143,7 +166,6 @@ def run_scraper():
         logging.info(f"⚡ Total APS Energy Used: {used}")
         logging.info(f"🏠 Total APS Energy Own Used: {own_used}")
 
-        # Load, update, and save cumulative totals
         totals = load_totals()
         totals["generated"] += generated
         totals["sold"] += sold
@@ -162,6 +184,10 @@ def run_scraper():
 
     except Exception as e:
         logging.error(f"❌ Scraper failed: {e}")
+        try:
+            driver.save_screenshot("error_screenshot.png")
+        except:
+            pass
     finally:
         driver.quit()
 
