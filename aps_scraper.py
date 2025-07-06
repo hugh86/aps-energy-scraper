@@ -69,7 +69,7 @@ def publish_discovery(client, topic_suffix, name, unit, unique_id):
 
 def publish_to_mqtt(message):
     client = mqtt.Client(
-        protocol=mqtt.MQTTv5,
+        protocol=mqtt.MQTTv311,
         callback_api_version=CallbackAPIVersion.V5  # ✅ Correct usage
     )
     if MQTT_USERNAME and MQTT_PASSWORD:
