@@ -9,7 +9,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import paho.mqtt.client as mqtt
-from paho.mqtt.client import CallbackAPIVersion  # ✅ Correct Enum import
 from datetime import datetime, timedelta
 import time
 
@@ -68,10 +67,7 @@ def publish_discovery(client, topic_suffix, name, unit, unique_id):
     client.publish(discovery_topic, json.dumps(payload), retain=True)
 
 def publish_to_mqtt(message):
-    client = mqtt.Client(
-        protocol=mqtt.MQTTv311,
-        callback_api_version=CallbackAPIVersion.V5  # ✅ Correct usage
-    )
+    client = mqtt.Client(protocol=mqtt.MQTTv311)  # ✅ Fixed: use MQTT 3.1.1 only
     if MQTT_USERNAME and MQTT_PASSWORD:
         client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
     client.connect(MQTT_HOST, MQTT_PORT, 60)
