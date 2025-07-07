@@ -15,6 +15,7 @@ import time
 from runtime_controller import wait_until_random_time
 
 ENERGY_TOTALS_FILE = "energy_totals.json"
+PREV_TOTALS_FILE = "energy_totals_prev.json"
 
 def load_totals():
     if os.path.exists(ENERGY_TOTALS_FILE):
@@ -24,6 +25,16 @@ def load_totals():
 
 def save_totals(totals):
     with open(ENERGY_TOTALS_FILE, "w") as f:
+        json.dump(totals, f)
+
+def load_prev_totals():
+    if os.path.exists(PREV_TOTALS_FILE):
+        with open(PREV_TOTALS_FILE, "r") as f:
+            return json.load(f)
+    return {"generated": 0.0, "sold": 0.0, "used": 0.0}
+
+def save_prev_totals(totals):
+    with open(PREV_TOTALS_FILE, "w") as f:
         json.dump(totals, f)
 
 # Load environment variables
@@ -66,20 +77,49 @@ def publish_discovery(client, topic_suffix, name, unit, unique_id):
     }
     client.publish(discovery_topic, json.dumps(payload), retain=True)
 
-def publish_to_mqtt(message):
+def publish_daily_discovery(client, topic_suffix, name, unique_id):
+    discovery_topic = f"homeassistant/sensor/aps_energy_{topic_suffix}_today/config"
+    payload = {
+        "name": f"{name} Today",
+        "state_topic": f"aps_energy/{topic_suffix}_today",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "state_class": "measurement",
+        "value_template": "{{ value | float }}",
+        "unique_id": f"{unique_id}_today",
+        "device": {
+            "identifiers": ["aps_energy_scraper"],
+            "name": "APS Energy Scraper",
+            "manufacturer": "Custom",
+            "model": "Web Scraper"
+        }
+    }
+    client.publish(discovery_topic, json.dumps(payload), retain=True)
+
+def publish_to_mqtt(message, daily):
     client = mqtt.Client(protocol=mqtt.MQTTv311)
     if MQTT_USERNAME and MQTT_PASSWORD:
         client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
     client.connect(MQTT_HOST, MQTT_PORT, 60)
 
+    # Total sensors
     publish_discovery(client, "generated", "Total Energy Generated", "kWh", "aps_energy_generated")
     publish_discovery(client, "sold", "Total Energy Sold To APS", "kWh", "aps_energy_sold")
     publish_discovery(client, "used", "Total APS Energy Used", "kWh", "aps_energy_used")
     publish_discovery(client, "own_used", "Total APS Energy Own Used", "kWh", "aps_energy_own_used")
 
+    # Daily sensors
+    publish_daily_discovery(client, "generated", "Total Energy Generated", "aps_energy_generated")
+    publish_daily_discovery(client, "sold", "Total Energy Sold To APS", "aps_energy_sold")
+    publish_daily_discovery(client, "used", "Total APS Energy Used", "aps_energy_used")
+
     logging.info(f"📤 Publishing to MQTT: {message}")
     for key, value in message.items():
         client.publish(f"aps_energy/{key}", value, retain=True)
+
+    logging.info(f"📆 Publishing daily sensors: {daily}")
+    for key, value in daily.items():
+        client.publish(f"aps_energy/{key}_today", value, retain=True)
 
     client.disconnect()
 
@@ -114,37 +154,17 @@ def run_scraper():
         driver.get("https://www.aps.com/en/Residential/Account/Overview/Dashboard?origin=usage")
         wait_for_spinner_to_disappear(driver)
 
-        try:
-            logging.info("🔍 Clicking 'Hourly' view...")
-            WebDriverWait(driver, 15).until(EC.element_to_be_clickable(
-                (By.XPATH, "//span[contains(text(),'Hourly')]"))
-            ).click()
-            wait_for_spinner_to_disappear(driver)
-        except Exception as e:
-            logging.error("❌ Failed to click on 'Hourly' tab.")
-            driver.save_screenshot("error_screenshot.png")
-            raise e
+        WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'Hourly')]"))).click()
+        wait_for_spinner_to_disappear(driver)
 
-        try:
-            logging.info("🔍 Waiting for date element...")
-            date_text = WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "span.css-geyj4e"))
-            ).text
-        except Exception as e:
-            logging.error("❌ Failed to get the date label.")
-            driver.save_screenshot("error_screenshot.png")
-            raise e
+        date_text = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "span.css-geyj4e"))
+        ).text
 
-        try:
-            logging.info("🔍 Waiting for data container...")
-            container = WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div.css-6req3m > div.css-15bvg19"))
-            )
-            data_spans = container.find_elements(By.CSS_SELECTOR, "span.css-1c4vfd5")
-        except Exception as e:
-            logging.error("❌ Failed to get data container or spans.")
-            driver.save_screenshot("error_screenshot.png")
-            raise e
+        container = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div.css-6req3m > div.css-15bvg19"))
+        )
+        data_spans = container.find_elements(By.CSS_SELECTOR, "span.css-1c4vfd5")
 
         energy_data = {}
         for span in data_spans:
@@ -161,10 +181,10 @@ def run_scraper():
         own_used = generated - sold
 
         logging.info(f"📆 Date: {date_text}")
-        logging.info(f"🔋 Total Energy Generated: {generated}")
-        logging.info(f"🔄 Total Energy Sold To APS: {sold}")
-        logging.info(f"⚡ Total APS Energy Used: {used}")
-        logging.info(f"🏠 Total APS Energy Own Used: {own_used}")
+        logging.info(f"🔋 Generated: {generated}")
+        logging.info(f"🔄 Sold: {sold}")
+        logging.info(f"⚡ Used: {used}")
+        logging.info(f"🏠 Own Used: {own_used}")
 
         totals = load_totals()
         totals["generated"] += generated
@@ -173,6 +193,18 @@ def run_scraper():
         totals["own_used"] = totals["generated"] - totals["sold"]
         save_totals(totals)
 
+        # Reset prev totals once after midnight
+        now = datetime.now()
+        if now.hour == 0 and now.minute < 30:
+            save_prev_totals(totals)
+
+        prev_totals = load_prev_totals()
+        daily = {
+            "generated": f"{totals['generated'] - prev_totals['generated']:.2f}",
+            "sold": f"{totals['sold'] - prev_totals['sold']:.2f}",
+            "used": f"{totals['used'] - prev_totals['used']:.2f}"
+        }
+
         mqtt_payload = {
             "generated": f"{totals['generated']:.2f}",
             "sold": f"{totals['sold']:.2f}",
@@ -180,7 +212,7 @@ def run_scraper():
             "own_used": f"{totals['own_used']:.2f}"
         }
 
-        publish_to_mqtt(mqtt_payload)
+        publish_to_mqtt(mqtt_payload, daily)
 
     except Exception as e:
         logging.error(f"❌ Scraper failed: {e}")
