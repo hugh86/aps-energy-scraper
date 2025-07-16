@@ -10,6 +10,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import paho.mqtt.client as mqtt
 from datetime import datetime, timedelta
+import socket
 import time
 
 from runtime_controller import wait_until_random_time
@@ -97,31 +98,43 @@ def publish_daily_discovery(client, topic_suffix, name, unique_id):
     client.publish(discovery_topic, json.dumps(payload), retain=True)
 
 def publish_to_mqtt(message, daily):
-    client = mqtt.Client(protocol=mqtt.MQTTv311)
-    if MQTT_USERNAME and MQTT_PASSWORD:
-        client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
-    client.connect(MQTT_HOST, MQTT_PORT, 60)
+    try:
+        # Optional: DNS test before connect
+        try:
+            socket.gethostbyname(MQTT_HOST)
+        except socket.gaierror:
+            logging.error(f"❌ DNS lookup failed for MQTT_HOST: {MQTT_HOST}")
+            return
 
-    # Total sensors
-    publish_discovery(client, "generated", "Total Energy Generated", "kWh", "aps_energy_generated")
-    publish_discovery(client, "sold", "Total Energy Sold To APS", "kWh", "aps_energy_sold")
-    publish_discovery(client, "used", "Total APS Energy Used", "kWh", "aps_energy_used")
-    publish_discovery(client, "own_used", "Total APS Energy Own Used", "kWh", "aps_energy_own_used")
+        client = mqtt.Client(protocol=mqtt.MQTTv311, callback_api_version=5)
 
-    # Daily sensors
-    publish_daily_discovery(client, "generated", "Total Energy Generated", "aps_energy_generated")
-    publish_daily_discovery(client, "sold", "Total Energy Sold To APS", "aps_energy_sold")
-    publish_daily_discovery(client, "used", "Total APS Energy Used", "aps_energy_used")
+        if MQTT_USERNAME and MQTT_PASSWORD:
+            client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
+        client.connect(MQTT_HOST, MQTT_PORT, 60)
 
-    logging.info(f"📤 Publishing to MQTT: {message}")
-    for key, value in message.items():
-        client.publish(f"aps_energy/{key}", value, retain=True)
+        # Total sensors
+        publish_discovery(client, "generated", "Total Energy Generated", "kWh", "aps_energy_generated")
+        publish_discovery(client, "sold", "Total Energy Sold To APS", "kWh", "aps_energy_sold")
+        publish_discovery(client, "used", "Total APS Energy Used", "kWh", "aps_energy_used")
+        publish_discovery(client, "own_used", "Total APS Energy Own Used", "kWh", "aps_energy_own_used")
 
-    logging.info(f"📆 Publishing daily sensors: {daily}")
-    for key, value in daily.items():
-        client.publish(f"aps_energy/{key}_today", value, retain=True)
+        # Daily sensors
+        publish_daily_discovery(client, "generated", "Total Energy Generated", "aps_energy_generated")
+        publish_daily_discovery(client, "sold", "Total Energy Sold To APS", "aps_energy_sold")
+        publish_daily_discovery(client, "used", "Total APS Energy Used", "aps_energy_used")
 
-    client.disconnect()
+        logging.info(f"📤 Publishing to MQTT: {message}")
+        for key, value in message.items():
+            client.publish(f"aps_energy/{key}", value, retain=True)
+
+        logging.info(f"📆 Publishing daily sensors: {daily}")
+        for key, value in daily.items():
+            client.publish(f"aps_energy/{key}_today", value, retain=True)
+
+        client.disconnect()
+
+    except Exception as e:
+        logging.error(f"❌ MQTT publish failed: {e}")
 
 def run_scraper():
     options = Options()
