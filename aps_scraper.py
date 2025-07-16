@@ -15,29 +15,6 @@ import time
 
 from runtime_controller import wait_until_random_time
 
-ENERGY_TOTALS_FILE = "energy_totals.json"
-PREV_TOTALS_FILE = "energy_totals_prev.json"
-
-def load_totals():
-    if os.path.exists(ENERGY_TOTALS_FILE):
-        with open(ENERGY_TOTALS_FILE, "r") as f:
-            return json.load(f)
-    return {"generated": 0.0, "sold": 0.0, "used": 0.0}
-
-def save_totals(totals):
-    with open(ENERGY_TOTALS_FILE, "w") as f:
-        json.dump(totals, f)
-
-def load_prev_totals():
-    if os.path.exists(PREV_TOTALS_FILE):
-        with open(PREV_TOTALS_FILE, "r") as f:
-            return json.load(f)
-    return {"generated": 0.0, "sold": 0.0, "used": 0.0}
-
-def save_prev_totals(totals):
-    with open(PREV_TOTALS_FILE, "w") as f:
-        json.dump(totals, f)
-
 # Load environment variables
 load_dotenv()
 
@@ -59,25 +36,6 @@ def wait_for_spinner_to_disappear(driver, timeout=15):
     except:
         pass
 
-def publish_discovery(client, topic_suffix, name, unit, unique_id):
-    discovery_topic = f"homeassistant/sensor/aps_energy_{topic_suffix}/config"
-    payload = {
-        "name": name,
-        "state_topic": f"aps_energy/{topic_suffix}",
-        "unit_of_measurement": unit,
-        "device_class": "energy",
-        "state_class": "total_increasing",
-        "value_template": "{{ value | float }}",
-        "unique_id": unique_id,
-        "device": {
-            "identifiers": ["aps_energy_scraper"],
-            "name": "APS Energy Scraper",
-            "manufacturer": "Custom",
-            "model": "Web Scraper"
-        }
-    }
-    client.publish(discovery_topic, json.dumps(payload), retain=True)
-
 def publish_daily_discovery(client, topic_suffix, name, unique_id):
     discovery_topic = f"homeassistant/sensor/aps_energy_{topic_suffix}_today/config"
     payload = {
@@ -97,9 +55,9 @@ def publish_daily_discovery(client, topic_suffix, name, unique_id):
     }
     client.publish(discovery_topic, json.dumps(payload), retain=True)
 
-def publish_to_mqtt(message, daily):
+def publish_to_mqtt(daily):
     try:
-        # Optional: DNS test before connect
+        # DNS check
         try:
             socket.gethostbyname(MQTT_HOST)
         except socket.gaierror:
@@ -112,21 +70,13 @@ def publish_to_mqtt(message, daily):
             client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
         client.connect(MQTT_HOST, MQTT_PORT, 60)
 
-        # Total sensors
-        publish_discovery(client, "generated", "Total Energy Generated", "kWh", "aps_energy_generated")
-        publish_discovery(client, "sold", "Total Energy Sold To APS", "kWh", "aps_energy_sold")
-        publish_discovery(client, "used", "Total APS Energy Used", "kWh", "aps_energy_used")
-        publish_discovery(client, "own_used", "Total APS Energy Own Used", "kWh", "aps_energy_own_used")
-
-        # Daily sensors
+        # Publish discovery
         publish_daily_discovery(client, "generated", "Total Energy Generated", "aps_energy_generated")
         publish_daily_discovery(client, "sold", "Total Energy Sold To APS", "aps_energy_sold")
         publish_daily_discovery(client, "used", "Total APS Energy Used", "aps_energy_used")
+        publish_daily_discovery(client, "own_used", "Total APS Energy Own Used", "aps_energy_own_used")
 
-        logging.info(f"📤 Publishing to MQTT: {message}")
-        for key, value in message.items():
-            client.publish(f"aps_energy/{key}", value, retain=True)
-
+        # Publish daily values
         logging.info(f"📆 Publishing daily sensors: {daily}")
         for key, value in daily.items():
             client.publish(f"aps_energy/{key}_today", value, retain=True)
@@ -199,33 +149,14 @@ def run_scraper():
         logging.info(f"⚡ Used: {used}")
         logging.info(f"🏠 Own Used: {own_used}")
 
-        totals = load_totals()
-        totals["generated"] += generated
-        totals["sold"] += sold
-        totals["used"] += used
-        totals["own_used"] = totals["generated"] - totals["sold"]
-        save_totals(totals)
-
-        # Reset prev totals once after midnight
-        now = datetime.now()
-        if now.hour == 0 and now.minute < 30:
-            save_prev_totals(totals)
-
-        prev_totals = load_prev_totals()
         daily = {
-            "generated": f"{totals['generated'] - prev_totals['generated']:.2f}",
-            "sold": f"{totals['sold'] - prev_totals['sold']:.2f}",
-            "used": f"{totals['used'] - prev_totals['used']:.2f}"
+            "generated": f"{generated:.2f}",
+            "sold": f"{sold:.2f}",
+            "used": f"{used:.2f}",
+            "own_used": f"{own_used:.2f}"
         }
 
-        mqtt_payload = {
-            "generated": f"{totals['generated']:.2f}",
-            "sold": f"{totals['sold']:.2f}",
-            "used": f"{totals['used']:.2f}",
-            "own_used": f"{totals['own_used']:.2f}"
-        }
-
-        publish_to_mqtt(mqtt_payload, daily)
+        publish_to_mqtt(daily)
 
     except Exception as e:
         logging.error(f"❌ Scraper failed: {e}")
